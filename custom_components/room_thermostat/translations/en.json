@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a room",
+        "description": "The temperature sensor is required; it is what this thermostat controls against instead of the air conditioner's internal sensor.",
+        "data": {
+          "name": "Room name",
+          "temperature_sensor": "Room temperature sensor",
+          "humidity_sensor": "Room humidity sensor",
+          "cooler": "Air conditioner",
+          "heaters": "Heating valves"
+        }
+      }
+    },
+    "error": {
+      "required": "A room temperature sensor is required.",
+      "no_devices": "Choose an air conditioner, one or more heating valves, or both."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Room settings",
+        "data": {
+          "cooling_strategy": "Cooling strategy",
+          "offset_correction": "Correct the unit's setpoint for its sensor error",
+          "allow_ac_heat": "Heat this room with the air conditioner instead of the valves",
+          "parked_setpoint": "Parked setpoint when gating (°C)",
+          "cool_cold_tolerance": "Cool: degrees above target before starting",
+          "cool_hot_tolerance": "Cool: degrees below target before stopping",
+          "cool_min_on": "Cool: minimum run (seconds)",
+          "cool_min_off": "Cool: minimum rest (seconds)",
+          "heat_cold_tolerance": "Heat: degrees below target before starting",
+          "heat_hot_tolerance": "Heat: degrees above target before stopping",
+          "heat_min_on": "Heat: minimum run (seconds)",
+          "heat_min_off": "Heat: minimum rest (seconds)",
+          "valve_travel": "Valve travel time (seconds)",
+          "frost_temperature": "Frost protection temperature (°C)"
+        }
+      }
+    }
+  }
+}
