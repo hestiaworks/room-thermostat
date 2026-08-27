@@ -1,0 +1,12 @@
+{
+  "domain": "room_thermostat",
+  "name": "Room Thermostat",
+  "codeowners": ["@theseus-elysium"],
+  "config_flow": true,
+  "documentation": "https://github.com/hestiaworks/room-thermostat",
+  "integration_type": "helper",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/hestiaworks/room-thermostat/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
