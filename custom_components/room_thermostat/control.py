@@ -20,6 +20,11 @@ ACTION_COOLING = "cooling"
 ACTION_DRYING = "drying"
 ACTION_FAN = "fan"
 
+# The largest sensor error the offset correction will believe. Beyond this a
+# unit is not merely miscalibrated — it is sensing its own return air — and
+# correcting for it feeds back on itself.
+MAX_OFFSET = 3.0
+
 
 @dataclass(frozen=True)
 class RoomConfig:
@@ -115,6 +120,25 @@ def _wants_heat(
     return room <= target - config.heat_cold_tolerance
 
 
+def _wants_cool(
+    room: float, target: float, currently_on: bool, config: RoomConfig
+) -> bool:
+    if currently_on:
+        return room > target - config.cool_hot_tolerance
+    return room >= target + config.cool_cold_tolerance
+
+
+def _corrected_target(target: float, readings: Readings, config: RoomConfig) -> float:
+    """Aim the unit at the room rather than at its own sensor."""
+    if not config.offset_correction or readings.cooler_temperature is None:
+        return target
+    if readings.room_temperature is None:
+        return target
+    offset = readings.room_temperature - readings.cooler_temperature
+    offset = max(-MAX_OFFSET, min(MAX_OFFSET, offset))
+    return target - offset
+
+
 def decide(
     config: RoomConfig,
     readings: Readings,
@@ -136,8 +160,42 @@ def decide(
             config.heat_min_off,
         )
 
+    cooler: CoolerCommand | None = None
+    cooler_on = False
+
+    if request.hvac_mode == "cool" and config.has_cooler and room is not None:
+        target = request.target if request.target is not None else 24.0
+        if config.cooling_strategy == "gated":
+            cooler_on = _switch(
+                _wants_cool(room, target, state.cooler_on, config),
+                state.cooler_on,
+                state.cooler_changed_at,
+                now,
+                config.cool_min_on,
+                config.cool_min_off,
+            )
+            cooler = (
+                CoolerCommand(hvac_mode="cool", target=config.parked_setpoint)
+                if cooler_on
+                else CoolerCommand(hvac_mode="off", target=None)
+            )
+        else:
+            cooler_on = True
+            cooler = CoolerCommand(
+                hvac_mode="cool", target=_corrected_target(target, readings, config)
+            )
+
     changed_at = now if heaters_on != state.heaters_on else state.heaters_changed_at
-    next_state = replace(state, heaters_on=heaters_on, heaters_changed_at=changed_at)
+    cooler_changed_at = (
+        now if cooler_on != state.cooler_on else state.cooler_changed_at
+    )
+    next_state = replace(
+        state,
+        heaters_on=heaters_on,
+        heaters_changed_at=changed_at,
+        cooler_on=cooler_on,
+        cooler_changed_at=cooler_changed_at,
+    )
 
     # Demand means the valve has had time to physically open, not that its
     # switch was energised.
@@ -147,12 +205,14 @@ def decide(
         action = ACTION_OFF
     elif heaters_on:
         action = ACTION_HEATING
+    elif cooler_on:
+        action = ACTION_COOLING
     else:
         action = ACTION_IDLE
 
     return Decision(
         heaters_on=heaters_on,
-        cooler=None,
+        cooler=cooler,
         heat_demand=demand,
         frost_active=False,
         hvac_action=action,
