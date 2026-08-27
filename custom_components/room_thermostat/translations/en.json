@@ -26,7 +26,8 @@
     },
     "error": {
       "required": "A room temperature sensor is required.",
-      "no_devices": "Choose an air conditioner, one or more heating valves, or both."
+      "no_devices": "Choose an air conditioner, one or more heating valves, or both.",
+      "own_entity": "That is one of this integration's own thermostats — a room cannot drive itself. Choose the air conditioner's own entity."
     },
     "abort": {
       "reconfigure_successful": "The room's devices were updated."
@@ -73,7 +74,8 @@
     },
     "error": {
       "required": "A room temperature sensor is required.",
-      "no_devices": "Choose an air conditioner, one or more heating valves, or both."
+      "no_devices": "Choose an air conditioner, one or more heating valves, or both.",
+      "own_entity": "That is one of this integration's own thermostats — a room cannot drive itself. Choose the air conditioner's own entity."
     }
   },
   "issues": {

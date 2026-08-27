@@ -12,7 +12,8 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import selector
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er, selector
 
 from .const import (
     CONF_ALLOW_AC_HEAT,
@@ -120,10 +121,20 @@ def sources(entry: Any) -> dict[str, Any]:
     return {key: entry.data.get(key) for key in SOURCE_KEYS}
 
 
-def _problems(user_input: dict[str, Any]) -> dict[str, str]:
+def _is_ours(hass: HomeAssistant, entity_id: str) -> bool:
+    entry = er.async_get(hass).async_get(entity_id)
+    return entry is not None and entry.platform == DOMAIN
+
+
+def _problems(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str, str]:
     if not user_input.get(CONF_TEMPERATURE_SENSOR):
         return {CONF_TEMPERATURE_SENSOR: "required"}
-    if not user_input.get(CONF_COOLER) and not user_input.get(CONF_HEATERS):
+    cooler = user_input.get(CONF_COOLER)
+    if cooler and _is_ours(hass, cooler):
+        # A room driving one of these would drive itself, and the loop is not
+        # visible from the interface.
+        return {CONF_COOLER: "own_entity"}
+    if not cooler and not user_input.get(CONF_HEATERS):
         # A room that can neither heat nor cool is a thermometer.
         return {"base": "no_devices"}
     return {}
@@ -137,7 +148,7 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = _problems(user_input)
+            errors = _problems(self.hass, user_input)
             if not errors:
                 return self.async_create_entry(
                     title=user_input["name"],
@@ -164,7 +175,7 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = _problems(user_input)
+            errors = _problems(self.hass, user_input)
             if not errors:
                 return self.async_update_reload_and_abort(
                     entry, title=user_input["name"], data=user_input
@@ -197,7 +208,7 @@ class RoomThermostatOptionsFlow(OptionsFlow):
         """The sensors and devices this room uses."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = _problems(user_input)
+            errors = _problems(self.hass, user_input)
             if not errors:
                 return self.async_create_entry(
                     data={**self.config_entry.options, **user_input}

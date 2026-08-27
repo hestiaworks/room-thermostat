@@ -232,17 +232,20 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
     def hvac_action(self):
         return self._action
 
+    # Exactly one kind of setpoint is reported at a time. Home Assistant
+    # decides which control to draw from these, and offering both leaves the
+    # card showing a single dial whose value heat_cool never reads.
     @property
     def target_temperature(self):
-        return self._target
+        return None if self._mode == HVACMode.HEAT_COOL else self._target
 
     @property
     def target_temperature_low(self):
-        return self._target_low
+        return self._target_low if self._mode == HVACMode.HEAT_COOL else None
 
     @property
     def target_temperature_high(self):
-        return self._target_high
+        return self._target_high if self._mode == HVACMode.HEAT_COOL else None
 
     # --- commands ---------------------------------------------------------
 

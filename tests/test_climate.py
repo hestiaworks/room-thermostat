@@ -189,3 +189,46 @@ async def test_a_room_with_no_unit_keeps_sensible_limits(hass: HomeAssistant):
     state = hass.states.get("climate.bedroom")
     assert state.attributes["min_temp"] == 7
     assert state.attributes["max_temp"] == 35
+
+
+async def test_a_room_reports_one_kind_of_setpoint_at_a_time(hass: HomeAssistant):
+    """Reporting a single target and a range together leaves the card unable
+    to tell which control to show, and a setpoint sent to the wrong one is
+    silently ignored."""
+    hass.states.async_set("sensor.bedroom_temperature", "24.0")
+    hass.states.async_set("climate.bedroom_ac", "off")
+    hass.states.async_set("switch.radiator", "off")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+            CONF_HEATERS: ["switch.radiator"],
+        },
+    )
+    async_mock_service(hass, "switch", "turn_on")
+    async_mock_service(hass, "switch", "turn_off")
+
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "cool"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    single = hass.states.get("climate.bedroom").attributes
+    assert single.get("temperature") is not None
+    assert single.get("target_temp_low") is None
+    assert single.get("target_temp_high") is None
+
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat_cool"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    ranged = hass.states.get("climate.bedroom").attributes
+    assert ranged.get("temperature") is None
+    assert ranged.get("target_temp_low") is not None
+    assert ranged.get("target_temp_high") is not None

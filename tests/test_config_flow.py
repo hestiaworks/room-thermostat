@@ -283,3 +283,33 @@ async def test_a_room_created_before_the_move_still_finds_its_devices(
         options = {}
 
     assert sources(Entry())[CONF_TEMPERATURE_SENSOR] == "sensor.old_place"
+
+
+async def test_a_room_cannot_be_its_own_air_conditioner(hass: HomeAssistant):
+    """Selecting one of these thermostats as the unit makes a room drive
+    itself, and the loop is not obvious from the interface."""
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.room_thermostat.config_flow import default_options
+
+    existing = MockConfigEntry(domain=DOMAIN, title="Study", data={"name": "Study"})
+    existing.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "climate", DOMAIN, "study-unique", suggested_object_id="study"
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "name": "Study Two",
+            CONF_TEMPERATURE_SENSOR: "sensor.study_temperature",
+            CONF_COOLER: "climate.study",
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_COOLER: "own_entity"}
