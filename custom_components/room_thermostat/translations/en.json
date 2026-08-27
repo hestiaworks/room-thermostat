@@ -36,6 +36,23 @@
     "step": {
       "init": {
         "title": "Room settings",
+        "menu_options": {
+          "devices": "Sensors and devices",
+          "tuning": "How it controls"
+        }
+      },
+      "devices": {
+        "title": "Sensors and devices",
+        "description": "Which sensors this room reads and which devices it drives. The temperature sensor is required; it is what the room is controlled against instead of the air conditioner's internal sensor.",
+        "data": {
+          "temperature_sensor": "Room temperature sensor",
+          "humidity_sensor": "Room humidity sensor",
+          "cooler": "Air conditioner",
+          "heaters": "Heating valves"
+        }
+      },
+      "tuning": {
+        "title": "How it controls",
         "data": {
           "cooling_strategy": "Cooling strategy",
           "offset_correction": "Correct the unit's setpoint for its sensor error",
@@ -53,6 +70,10 @@
           "frost_temperature": "Frost protection temperature (°C)"
         }
       }
+    },
+    "error": {
+      "required": "A room temperature sensor is required.",
+      "no_devices": "Choose an air conditioner, one or more heating valves, or both."
     }
   },
   "issues": {

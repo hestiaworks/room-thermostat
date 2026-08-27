@@ -66,6 +66,24 @@ ROOM_SCHEMA = vol.Schema(
 )
 
 
+DEVICES_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_TEMPERATURE_SENSOR): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+        ),
+        vol.Optional(CONF_HUMIDITY_SENSOR): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+        ),
+        vol.Optional(CONF_COOLER): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
+        ),
+        vol.Optional(CONF_HEATERS): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="switch", multiple=True)
+        ),
+    }
+)
+
+
 def default_options() -> dict[str, Any]:
     return {
         CONF_COOLING_STRATEGY: STRATEGY_PASSTHROUGH,
@@ -83,6 +101,23 @@ def default_options() -> dict[str, Any]:
         CONF_ALLOW_AC_HEAT: False,
         CONF_FROST_TEMPERATURE: DEFAULT_FROST_TEMPERATURE,
     }
+
+
+SOURCE_KEYS = (CONF_TEMPERATURE_SENSOR, CONF_HUMIDITY_SENSOR, CONF_COOLER, CONF_HEATERS)
+
+
+def sources(entry: Any) -> dict[str, Any]:
+    """Which sensors and devices a room uses.
+
+    Sources moved from the entry's data into its options, because a helper
+    gets exactly one configuration door in the interface and that door opens
+    the options flow. Rooms created before the move still hold theirs in data,
+    and are read from there rather than being made to start again.
+    """
+    found = {key: entry.options.get(key) for key in SOURCE_KEYS}
+    if any(found.values()):
+        return found
+    return {key: entry.data.get(key) for key in SOURCE_KEYS}
 
 
 def _problems(user_input: dict[str, Any]) -> dict[str, str]:
@@ -106,8 +141,11 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
             if not errors:
                 return self.async_create_entry(
                     title=user_input["name"],
-                    data=user_input,
-                    options=default_options(),
+                    data={"name": user_input["name"]},
+                    options={
+                        **default_options(),
+                        **{k: v for k, v in user_input.items() if k in SOURCE_KEYS},
+                    },
                 )
         return self.async_show_form(
             step_id="user", data_schema=ROOM_SCHEMA, errors=errors
@@ -149,8 +187,37 @@ class RoomThermostatOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
+        return self.async_show_menu(
+            step_id="init", menu_options=["devices", "tuning"]
+        )
+
+    async def async_step_devices(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """The sensors and devices this room uses."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            errors = _problems(user_input)
+            if not errors:
+                return self.async_create_entry(
+                    data={**self.config_entry.options, **user_input}
+                )
+        current = user_input or sources(self.config_entry)
+        return self.async_show_form(
+            step_id="devices",
+            data_schema=self.add_suggested_values_to_schema(
+                DEVICES_SCHEMA, {k: v for k, v in current.items() if v}
+            ),
+            errors=errors,
+        )
+
+    async def async_step_tuning(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        if user_input is not None:
+            return self.async_create_entry(
+                data={**self.config_entry.options, **user_input}
+            )
         current = {**default_options(), **self.config_entry.options}
         numbers = (
             CONF_PARKED_SETPOINT,
@@ -182,4 +249,4 @@ class RoomThermostatOptionsFlow(OptionsFlow):
         }
         for key in numbers:
             schema[vol.Required(key, default=current[key])] = vol.Coerce(float)
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(schema))
+        return self.async_show_form(step_id="tuning", data_schema=vol.Schema(schema))

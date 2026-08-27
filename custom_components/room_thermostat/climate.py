@@ -31,6 +31,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from . import control
+from .config_flow import sources
 from .const import (
     CONF_ALLOW_AC_HEAT,
     CONF_COOL_COLD_TOLERANCE,
@@ -99,10 +100,11 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         self.hass = hass
         self._entry = entry
         self._attr_unique_id = entry.entry_id
-        self._sensor = entry.data.get(CONF_TEMPERATURE_SENSOR)
-        self._humidity = entry.data.get(CONF_HUMIDITY_SENSOR)
-        self._cooler = entry.data.get(CONF_COOLER)
-        self._heaters: list[str] = list(entry.data.get(CONF_HEATERS) or [])
+        chosen = sources(entry)
+        self._sensor = chosen.get(CONF_TEMPERATURE_SENSOR)
+        self._humidity = chosen.get(CONF_HUMIDITY_SENSOR)
+        self._cooler = chosen.get(CONF_COOLER)
+        self._heaters: list[str] = list(chosen.get(CONF_HEATERS) or [])
         self._mode = HVACMode.OFF
         self._target = 21.0
         self._target_low = 20.0
