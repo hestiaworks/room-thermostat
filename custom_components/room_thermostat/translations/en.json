@@ -40,5 +40,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "sensor_lost": {
+      "title": "{room} has lost its temperature sensor",
+      "description": "{sensor} is unavailable, so {room} cannot be controlled against a reading. It has fallen back to warming through periodically so it cannot freeze, but it is no longer holding a temperature. Restore the sensor, or reconfigure the room to use a different one."
+    }
   }
 }
