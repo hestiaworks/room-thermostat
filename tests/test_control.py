@@ -298,3 +298,104 @@ def test_a_gated_unit_respects_its_minimum_off_time():
         now=1240.0,
     )
     assert decision.cooler.hvac_mode == "off"
+
+
+def test_dry_forwards_to_the_unit_and_leaves_the_valves_shut():
+    decision = decide(
+        config(has_cooler=True, has_heater=True),
+        Readings(room_temperature=26.0, room_humidity=58.0, cooler_temperature=24.0),
+        Request(hvac_mode="dry", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.cooler == CoolerCommand(hvac_mode="dry", target=None)
+    assert decision.heaters_on is False
+    assert decision.hvac_action == "drying"
+
+
+def test_fan_only_forwards_to_the_unit():
+    decision = decide(
+        config(has_cooler=True, has_heater=True),
+        Readings(room_temperature=26.0, room_humidity=None, cooler_temperature=24.0),
+        Request(hvac_mode="fan_only", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.cooler == CoolerCommand(hvac_mode="fan_only", target=None)
+    assert decision.hvac_action == "fan"
+
+
+def test_heat_uses_the_valves_and_never_the_unit_by_default():
+    decision = decide(
+        config(has_cooler=True, has_heater=True, allow_ac_heat=False),
+        Readings(room_temperature=18.0, room_humidity=None, cooler_temperature=20.0),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.heaters_on is True
+    assert decision.cooler == CoolerCommand(hvac_mode="off", target=None)
+
+
+def test_allowing_the_unit_to_heat_is_either_or_not_assist():
+    """When a room heats with its air conditioner, the valves stay shut."""
+    decision = decide(
+        config(has_cooler=True, has_heater=True, allow_ac_heat=True),
+        Readings(room_temperature=18.0, room_humidity=None, cooler_temperature=20.0),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.heaters_on is False
+    assert decision.heat_demand is False
+    assert decision.cooler == CoolerCommand(hvac_mode="heat", target=21.0)
+    assert decision.hvac_action == "heating"
+
+
+def test_auto_heats_below_the_low_setpoint():
+    decision = decide(
+        config(has_cooler=True, has_heater=True),
+        Readings(room_temperature=18.0, room_humidity=None, cooler_temperature=20.0),
+        Request(hvac_mode="heat_cool", target=None, target_low=20.0, target_high=25.0),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.heaters_on is True
+    assert decision.cooler == CoolerCommand(hvac_mode="off", target=None)
+
+
+def test_auto_cools_above_the_high_setpoint():
+    decision = decide(
+        config(has_cooler=True, has_heater=True),
+        Readings(room_temperature=27.0, room_humidity=None, cooler_temperature=24.0),
+        Request(hvac_mode="heat_cool", target=None, target_low=20.0, target_high=25.0),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.heaters_on is False
+    assert decision.cooler.hvac_mode == "cool"
+
+
+def test_auto_does_nothing_inside_the_dead_zone():
+    """A room must not be able to fight itself."""
+    decision = decide(
+        config(has_cooler=True, has_heater=True),
+        Readings(room_temperature=22.5, room_humidity=None, cooler_temperature=22.0),
+        Request(hvac_mode="heat_cool", target=None, target_low=20.0, target_high=25.0),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.heaters_on is False
+    assert decision.cooler == CoolerCommand(hvac_mode="off", target=None)
+    assert decision.hvac_action == "idle"
+
+
+def test_a_room_with_no_cooler_is_never_sent_a_cooler_command():
+    decision = decide(
+        config(has_cooler=False, has_heater=True),
+        Readings(room_temperature=26.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.cooler is None
