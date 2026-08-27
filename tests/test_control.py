@@ -188,3 +188,113 @@ def test_off_closes_the_valves():
 def test_unused_import_guard():
     """CoolerCommand and Request are used by later tasks; keep the import honest."""
     assert CoolerCommand(hvac_mode="off", target=None).target is None
+
+
+def cooling_config(**overrides) -> RoomConfig:
+    return config(has_cooler=True, has_heater=False, **overrides)
+
+
+def test_passthrough_forwards_the_target_and_lets_the_unit_modulate():
+    """An inverter unit regulates itself; we only tell it what to aim for."""
+    decision = decide(
+        cooling_config(cooling_strategy="passthrough"),
+        Readings(room_temperature=26.0, room_humidity=None, cooler_temperature=24.0),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.cooler == CoolerCommand(hvac_mode="cool", target=22.0)
+    assert decision.hvac_action == "cooling"
+
+
+def test_offset_correction_is_off_unless_asked_for():
+    decision = decide(
+        cooling_config(cooling_strategy="passthrough", offset_correction=False),
+        Readings(room_temperature=26.0, room_humidity=None, cooler_temperature=24.0),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.cooler.target == 22.0
+
+
+def test_offset_correction_aims_at_the_room_not_the_unit():
+    """The unit reads 2 degrees cool, so 22 in the room means asking for 20."""
+    decision = decide(
+        cooling_config(cooling_strategy="passthrough", offset_correction=True),
+        Readings(room_temperature=26.0, room_humidity=None, cooler_temperature=24.0),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.cooler.target == 20.0
+
+
+def test_offset_correction_is_clamped_so_it_cannot_run_away():
+    """A cabinet-mounted unit's offset grows without limit; the clamp is the
+    backstop that keeps a misconfigured room merely wrong, not destructive."""
+    decision = decide(
+        cooling_config(cooling_strategy="passthrough", offset_correction=True),
+        Readings(room_temperature=26.0, room_humidity=None, cooler_temperature=18.0),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.cooler.target == 19.0
+
+
+def test_gated_parks_the_unit_low_and_runs_it_against_the_room():
+    decision = decide(
+        cooling_config(cooling_strategy="gated", parked_setpoint=17.0),
+        Readings(room_temperature=26.0, room_humidity=None, cooler_temperature=22.0),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.cooler == CoolerCommand(hvac_mode="cool", target=17.0)
+    assert decision.state.cooler_on is True
+
+
+def test_gated_stops_the_unit_once_the_room_is_cool_enough():
+    running = LoopState(
+        heaters_on=False, heaters_changed_at=0.0, cooler_on=True, cooler_changed_at=0.0
+    )
+    decision = decide(
+        cooling_config(cooling_strategy="gated"),
+        Readings(room_temperature=21.4, room_humidity=None, cooler_temperature=20.0),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        running,
+        now=5000.0,
+    )
+    assert decision.cooler == CoolerCommand(hvac_mode="off", target=None)
+    assert decision.hvac_action == "idle"
+
+
+def test_a_gated_unit_four_minutes_into_a_fifteen_minute_run_does_not_stop():
+    """The whole point of the minimum: these units already cycle every five to
+    ten minutes, which is what we are fixing, not reproducing."""
+    running = LoopState(
+        heaters_on=False, heaters_changed_at=0.0, cooler_on=True, cooler_changed_at=1000.0
+    )
+    decision = decide(
+        cooling_config(cooling_strategy="gated", cool_min_on=900.0),
+        Readings(room_temperature=20.0, room_humidity=None, cooler_temperature=18.0),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        running,
+        now=1240.0,
+    )
+    assert decision.cooler.hvac_mode == "cool"
+
+
+def test_a_gated_unit_respects_its_minimum_off_time():
+    stopped = LoopState(
+        heaters_on=False, heaters_changed_at=0.0, cooler_on=False, cooler_changed_at=1000.0
+    )
+    decision = decide(
+        cooling_config(cooling_strategy="gated", cool_min_off=900.0),
+        Readings(room_temperature=28.0, room_humidity=None, cooler_temperature=24.0),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        stopped,
+        now=1240.0,
+    )
+    assert decision.cooler.hvac_mode == "off"
