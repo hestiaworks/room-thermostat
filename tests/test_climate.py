@@ -423,3 +423,134 @@ async def test_a_helper_can_stand_in_for_a_temperature_sensor(hass: HomeAssistan
     hass.states.async_set("input_number.fake_room_temperature", "18.0")
     await hass.async_block_till_done()
     assert {e for c in opened for e in c.data["entity_id"]} == {"valve.radiator_a"}
+
+
+async def test_an_inverted_valve_is_closed_to_let_heat_through(hass: HomeAssistant):
+    """Thermal actuators come normally-open as well as normally-closed. On a
+    normally-open valve, energising it shuts the radiator off."""
+    hass.states.async_set("sensor.bedroom_temperature", "18.0")
+    hass.states.async_set("valve.radiator_inverted", "open")
+    entry = await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["valve.radiator_inverted"],
+        },
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        options={**entry.options, "inverted_heaters": ["valve.radiator_inverted"]},
+    )
+    await hass.async_block_till_done()
+
+    opened = async_mock_service(hass, "valve", "open_valve")
+    closed = async_mock_service(hass, "valve", "close_valve")
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 21.0},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    # Everything above may have emitted calls while the mode was still off.
+    # Only what the loop does once it is heating is being asserted.
+    opened.clear()
+    closed.clear()
+    hass.states.async_set("sensor.bedroom_temperature", "17.9")
+    await hass.async_block_till_done()
+
+    assert {e for c in closed for e in c.data["entity_id"]} == {"valve.radiator_inverted"}
+    assert opened == []
+
+
+async def test_a_room_can_mix_inverted_and_normal_valves(hass: HomeAssistant):
+    hass.states.async_set("sensor.bedroom_temperature", "18.0")
+    hass.states.async_set("valve.normal", "closed")
+    hass.states.async_set("valve.inverted", "open")
+    entry = await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["valve.normal", "valve.inverted"],
+        },
+    )
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "inverted_heaters": ["valve.inverted"]}
+    )
+    await hass.async_block_till_done()
+
+    opened = async_mock_service(hass, "valve", "open_valve")
+    closed = async_mock_service(hass, "valve", "close_valve")
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 21.0},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    # Everything above may have emitted calls while the mode was still off.
+    # Only what the loop does once it is heating is being asserted.
+    opened.clear()
+    closed.clear()
+    hass.states.async_set("sensor.bedroom_temperature", "17.9")
+    await hass.async_block_till_done()
+
+    assert {e for c in opened for e in c.data["entity_id"]} == {"valve.normal"}
+    assert {e for c in closed for e in c.data["entity_id"]} == {"valve.inverted"}
+
+
+async def test_an_inverted_valve_already_in_the_right_place_is_left_alone(
+    hass: HomeAssistant,
+):
+    hass.states.async_set("sensor.bedroom_temperature", "18.0")
+    hass.states.async_set("valve.radiator_inverted", "closed")
+    entry = await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["valve.radiator_inverted"],
+        },
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        options={**entry.options, "inverted_heaters": ["valve.radiator_inverted"]},
+    )
+    await hass.async_block_till_done()
+
+    opened = async_mock_service(hass, "valve", "open_valve")
+    closed = async_mock_service(hass, "valve", "close_valve")
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 21.0},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    # Everything above may have emitted calls while the mode was still off.
+    # Only what the loop does once it is heating is being asserted.
+    opened.clear()
+    closed.clear()
+    hass.states.async_set("sensor.bedroom_temperature", "17.9")
+    await hass.async_block_till_done()
+    assert opened == [] and closed == []

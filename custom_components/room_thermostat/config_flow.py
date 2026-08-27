@@ -29,6 +29,7 @@ from .const import (
     CONF_HEAT_MIN_OFF,
     CONF_HEAT_MIN_ON,
     CONF_HEATERS,
+    CONF_INVERTED_HEATERS,
     CONF_HUMIDITY_SENSOR,
     CONF_OFFSET_CORRECTION,
     CONF_PARKED_SETPOINT,
@@ -92,6 +93,7 @@ DEVICE_FIELDS = {
     vol.Optional(CONF_HUMIDITY_SENSOR): HUMIDITY_SELECTOR,
     vol.Optional(CONF_COOLER): COOLER_SELECTOR,
     vol.Optional(CONF_HEATERS): HEATERS_SELECTOR,
+    vol.Optional(CONF_INVERTED_HEATERS): HEATERS_SELECTOR,
 }
 
 ROOM_SCHEMA = vol.Schema(
@@ -120,7 +122,13 @@ def default_options() -> dict[str, Any]:
     }
 
 
-SOURCE_KEYS = (CONF_TEMPERATURE_SENSOR, CONF_HUMIDITY_SENSOR, CONF_COOLER, CONF_HEATERS)
+SOURCE_KEYS = (
+    CONF_TEMPERATURE_SENSOR,
+    CONF_HUMIDITY_SENSOR,
+    CONF_COOLER,
+    CONF_HEATERS,
+    CONF_INVERTED_HEATERS,
+)
 
 
 def sources(entry: Any) -> dict[str, Any]:
@@ -131,10 +139,13 @@ def sources(entry: Any) -> dict[str, Any]:
     the options flow. Rooms created before the move still hold theirs in data,
     and are read from there rather than being made to start again.
     """
-    found = {key: entry.options.get(key) for key in SOURCE_KEYS}
-    if any(found.values()):
-        return found
-    return {key: entry.data.get(key) for key in SOURCE_KEYS}
+    # Decided per key, not wholesale. Choosing one place for all of them meant
+    # that writing a single source into the options orphaned every source a
+    # legacy room still kept in its data.
+    return {
+        key: entry.options[key] if key in entry.options else entry.data.get(key)
+        for key in SOURCE_KEYS
+    }
 
 
 def _is_ours(hass: HomeAssistant, entity_id: str) -> bool:
@@ -150,6 +161,9 @@ def _problems(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str, str]
         # A room driving one of these would drive itself, and the loop is not
         # visible from the interface.
         return {CONF_COOLER: "own_entity"}
+    inverted = set(user_input.get(CONF_INVERTED_HEATERS) or [])
+    if not inverted <= set(user_input.get(CONF_HEATERS) or []):
+        return {CONF_INVERTED_HEATERS: "not_a_heater"}
     if not cooler and not user_input.get(CONF_HEATERS):
         # A room that can neither heat nor cool is a thermometer.
         return {"base": "no_devices"}
@@ -226,8 +240,12 @@ class RoomThermostatOptionsFlow(OptionsFlow):
         if user_input is not None:
             errors = _problems(self.hass, user_input)
             if not errors:
+                # Every source key is written, including the ones left empty,
+                # so clearing a device clears it instead of falling back to
+                # whatever the room used before.
+                chosen = {key: user_input.get(key) for key in SOURCE_KEYS}
                 return self.async_create_entry(
-                    data={**self.config_entry.options, **user_input}
+                    data={**self.config_entry.options, **chosen}
                 )
         current = user_input or sources(self.config_entry)
         return self.async_show_form(

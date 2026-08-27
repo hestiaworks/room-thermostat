@@ -9,7 +9,8 @@
           "temperature_sensor": "Room temperature sensor",
           "humidity_sensor": "Room humidity sensor",
           "cooler": "Air conditioner",
-          "heaters": "Heating valves"
+          "heaters": "Heating valves",
+          "inverted_heaters": "Heaters wired the other way round"
         }
       },
       "reconfigure": {
@@ -27,7 +28,8 @@
     "error": {
       "required": "A room temperature sensor is required.",
       "no_devices": "Choose an air conditioner, one or more heating valves, or both.",
-      "own_entity": "That is one of this integration's own thermostats — a room cannot drive itself. Choose the air conditioner's own entity."
+      "own_entity": "That is one of this integration's own thermostats — a room cannot drive itself. Choose the air conditioner's own entity.",
+      "not_a_heater": "Only a heater this room drives can be marked as wired the other way round."
     },
     "abort": {
       "reconfigure_successful": "The room's devices were updated."
@@ -44,12 +46,13 @@
       },
       "devices": {
         "title": "Sensors and devices",
-        "description": "Which sensors this room reads and which devices it drives. The temperature sensor is required; it is what the room is controlled against instead of the air conditioner's internal sensor.",
+        "description": "Which sensors this room reads and which devices it drives. The temperature sensor is required; it is what the room is controlled against instead of the air conditioner's internal sensor. Normally-open actuators, which are energised to stop heat rather than to let it through. Leave empty unless a valve behaves backwards.",
         "data": {
           "temperature_sensor": "Room temperature sensor",
           "humidity_sensor": "Room humidity sensor",
           "cooler": "Air conditioner",
-          "heaters": "Heating valves"
+          "heaters": "Heating valves",
+          "inverted_heaters": "Heaters wired the other way round"
         }
       },
       "tuning": {
@@ -75,7 +78,8 @@
     "error": {
       "required": "A room temperature sensor is required.",
       "no_devices": "Choose an air conditioner, one or more heating valves, or both.",
-      "own_entity": "That is one of this integration's own thermostats — a room cannot drive itself. Choose the air conditioner's own entity."
+      "own_entity": "That is one of this integration's own thermostats — a room cannot drive itself. Choose the air conditioner's own entity.",
+      "not_a_heater": "Only a heater this room drives can be marked as wired the other way round."
     }
   },
   "issues": {

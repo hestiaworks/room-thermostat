@@ -335,3 +335,68 @@ def test_a_helper_can_be_offered_as_a_temperature_source():
             assert {"sensor", "input_number", "number"} <= domains
             return
     raise AssertionError("no temperature sensor field in the schema")
+
+
+async def test_changing_one_source_does_not_wipe_the_others(hass: HomeAssistant):
+    """A room created before sources moved into options keeps them in data.
+    Writing a single key into options must not orphan the rest."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.room_thermostat.config_flow import default_options, sources
+    from custom_components.room_thermostat.const import CONF_INVERTED_HEATERS
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Living Room",
+        data={
+            "name": "Living Room",
+            CONF_TEMPERATURE_SENSOR: "sensor.living_room_temperature",
+            CONF_COOLER: "climate.living_room_ac",
+            CONF_HEATERS: ["valve.radiator"],
+        },
+        options={**default_options(), CONF_INVERTED_HEATERS: ["valve.radiator"]},
+    )
+    entry.add_to_hass(hass)
+
+    found = sources(entry)
+    assert found[CONF_TEMPERATURE_SENSOR] == "sensor.living_room_temperature"
+    assert found[CONF_COOLER] == "climate.living_room_ac"
+    assert found[CONF_HEATERS] == ["valve.radiator"]
+    assert found[CONF_INVERTED_HEATERS] == ["valve.radiator"]
+
+
+async def test_clearing_a_source_in_the_form_really_clears_it(hass: HomeAssistant):
+    """Leaving a field empty must remove the device, not fall back to what the
+    room used before."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.room_thermostat.config_flow import default_options, sources
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Living Room",
+        data={"name": "Living Room"},
+        options={
+            **default_options(),
+            CONF_TEMPERATURE_SENSOR: "sensor.living_room_temperature",
+            CONF_COOLER: "climate.living_room_ac",
+            CONF_HEATERS: ["valve.radiator"],
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "devices"}
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_TEMPERATURE_SENSOR: "sensor.living_room_temperature",
+            CONF_HEATERS: ["valve.radiator"],
+        },
+    )
+    await hass.async_block_till_done()
+    assert sources(entry)[CONF_COOLER] is None
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

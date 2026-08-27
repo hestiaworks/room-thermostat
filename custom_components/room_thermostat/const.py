@@ -18,6 +18,7 @@ CONF_HEAT_COLD_TOLERANCE = "heat_cold_tolerance"
 CONF_HEAT_HOT_TOLERANCE = "heat_hot_tolerance"
 CONF_HEAT_MIN_ON = "heat_min_on"
 CONF_HEAT_MIN_OFF = "heat_min_off"
+CONF_INVERTED_HEATERS = "inverted_heaters"
 CONF_ALLOW_AC_HEAT = "allow_ac_heat"
 CONF_FROST_TEMPERATURE = "frost_temperature"
 

@@ -46,6 +46,7 @@ from .const import (
     CONF_HEAT_MIN_OFF,
     CONF_HEAT_MIN_ON,
     CONF_HEATERS,
+    CONF_INVERTED_HEATERS,
     CONF_HUMIDITY_SENSOR,
     CONF_OFFSET_CORRECTION,
     CONF_PARKED_SETPOINT,
@@ -123,6 +124,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         self._humidity = chosen.get(CONF_HUMIDITY_SENSOR)
         self._cooler = chosen.get(CONF_COOLER)
         self._heaters: list[str] = list(chosen.get(CONF_HEATERS) or [])
+        self._inverted = set(entry.options.get(CONF_INVERTED_HEATERS) or [])
         self._mode = HVACMode.OFF
         self._target = 21.0
         self._target_low = 20.0
@@ -241,6 +243,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
             "humidity_sensor": self._humidity,
             "cooler": self._cooler,
             "heaters": self._heaters,
+            "inverted_heaters": sorted(self._inverted),
             "heat_demand": self._demand,
             "frost_protection": self._frost,
             "unavailable_devices": missing,
@@ -404,7 +407,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         """
         # Grouped by domain, because a room may mix a radiator valve with a
         # relay-driven loop and they take different services.
-        stale: dict[str, list[str]] = {}
+        stale: dict[tuple[str, bool], list[str]] = {}
         for heater in self._heaters:
             domain = heater.split(".")[0]
             if domain not in HEATERS:
@@ -415,14 +418,17 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
             # would fail anyway.
             if state is None or state.state in ("unavailable", "unknown"):
                 continue
-            _, settled = HEATERS[domain][decision.heaters_on]
+            # A normally-open actuator is energised to *stop* heat, so heating
+            # the room means telling it the opposite of everything else.
+            energise = decision.heaters_on != (heater in self._inverted)
+            _, settled = HEATERS[domain][energise]
             # "opening" counts as already told: a valve reports it for minutes.
             if state.state in settled:
                 continue
-            stale.setdefault(domain, []).append(heater)
+            stale.setdefault((domain, energise), []).append(heater)
 
-        for domain, entities in stale.items():
-            service, _ = HEATERS[domain][decision.heaters_on]
+        for (domain, energise), entities in stale.items():
+            service, _ = HEATERS[domain][energise]
             await self.hass.services.async_call(
                 domain, service, {ATTR_ENTITY_ID: entities}, blocking=False
             )
