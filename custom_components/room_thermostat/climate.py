@@ -62,6 +62,24 @@ from .const import (
 # on the clock rather than on an event, so something has to come back and look.
 TICK = timedelta(seconds=30)
 
+# What each kind of heater is told, and what it says when it is doing it. A
+# radiator valve is a valve entity, not a switch — assuming otherwise made the
+# only selectable heaters things like an air conditioner's panel light.
+HEATERS = {
+    "valve": {
+        True: ("open_valve", ("open", "opening")),
+        False: ("close_valve", ("closed", "closing")),
+    },
+    "switch": {
+        True: ("turn_on", ("on",)),
+        False: ("turn_off", ("off",)),
+    },
+    "input_boolean": {
+        True: ("turn_on", ("on",)),
+        False: ("turn_off", ("off",)),
+    },
+}
+
 ACTIONS = {
     control.ACTION_OFF: HVACAction.OFF,
     control.ACTION_IDLE: HVACAction.IDLE,
@@ -384,23 +402,29 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         the devices actually report also means a valve someone flipped by hand
         is put back rather than quietly ignored.
         """
-        wanted = "on" if decision.heaters_on else "off"
-        # A valve that is missing or unavailable is not commanded at all: the
-        # spec stops driving a side that has gone rather than shouting into
-        # the void, and a service call to a device that is not there fails.
-        stale = [
-            heater
-            for heater in self._heaters
-            if (state := self.hass.states.get(heater)) is not None
-            and state.state not in ("unavailable", "unknown")
-            and state.state != wanted
-        ]
-        if stale:
+        # Grouped by domain, because a room may mix a radiator valve with a
+        # relay-driven loop and they take different services.
+        stale: dict[str, list[str]] = {}
+        for heater in self._heaters:
+            domain = heater.split(".")[0]
+            if domain not in HEATERS:
+                continue
+            state = self.hass.states.get(heater)
+            # A device that is missing or unavailable is not commanded at all:
+            # driving a side that has gone shouts into the void, and the call
+            # would fail anyway.
+            if state is None or state.state in ("unavailable", "unknown"):
+                continue
+            _, settled = HEATERS[domain][decision.heaters_on]
+            # "opening" counts as already told: a valve reports it for minutes.
+            if state.state in settled:
+                continue
+            stale.setdefault(domain, []).append(heater)
+
+        for domain, entities in stale.items():
+            service, _ = HEATERS[domain][decision.heaters_on]
             await self.hass.services.async_call(
-                "switch",
-                "turn_on" if decision.heaters_on else "turn_off",
-                {ATTR_ENTITY_ID: stale},
-                blocking=False,
+                domain, service, {ATTR_ENTITY_ID: entities}, blocking=False
             )
 
         if decision.cooler is None or not self._cooler:

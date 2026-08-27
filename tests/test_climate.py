@@ -256,3 +256,133 @@ async def test_the_room_reports_what_it_is_working_with(hass: HomeAssistant):
     assert attributes["frost_protection"] is False
     # The one that matters when a room seems inert: a device it cannot see.
     assert attributes["unavailable_devices"] == ["switch.missing"]
+
+
+async def test_a_radiator_valve_is_opened_with_valve_services(hass: HomeAssistant):
+    """Radiator valves are valve entities, not switches. Assuming switches
+    left the only selectable 'heaters' being things like an air conditioner's
+    panel light."""
+    hass.states.async_set("sensor.bedroom_temperature", "18.0")
+    hass.states.async_set("valve.radiator_a", "closed")
+    hass.states.async_set("valve.radiator_b", "closed")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["valve.radiator_a", "valve.radiator_b"],
+        },
+    )
+    opened = async_mock_service(hass, "valve", "open_valve")
+    async_mock_service(hass, "valve", "close_valve")
+
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 21.0},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    targets = {entity for call in opened for entity in call.data["entity_id"]}
+    assert targets == {"valve.radiator_a", "valve.radiator_b"}
+
+
+async def test_a_valve_already_open_is_left_alone(hass: HomeAssistant):
+    hass.states.async_set("sensor.bedroom_temperature", "18.0")
+    hass.states.async_set("valve.radiator_a", "open")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["valve.radiator_a"],
+        },
+    )
+    opened = async_mock_service(hass, "valve", "open_valve")
+    async_mock_service(hass, "valve", "close_valve")
+
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 21.0},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert opened == []
+
+
+async def test_a_valve_still_travelling_is_not_told_again(hass: HomeAssistant):
+    """A valve reports opening for minutes; re-commanding it every tick would
+    fill the log without changing anything."""
+    hass.states.async_set("sensor.bedroom_temperature", "18.0")
+    hass.states.async_set("valve.radiator_a", "opening")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["valve.radiator_a"],
+        },
+    )
+    opened = async_mock_service(hass, "valve", "open_valve")
+    async_mock_service(hass, "valve", "close_valve")
+
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 21.0},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert opened == []
+
+
+async def test_valves_and_switches_can_heat_the_same_room(hass: HomeAssistant):
+    """A room may have a radiator valve and a relay-driven loop at once."""
+    hass.states.async_set("sensor.bedroom_temperature", "18.0")
+    hass.states.async_set("valve.radiator_a", "closed")
+    hass.states.async_set("switch.floor_loop", "off")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["valve.radiator_a", "switch.floor_loop"],
+        },
+    )
+    opened = async_mock_service(hass, "valve", "open_valve")
+    async_mock_service(hass, "valve", "close_valve")
+    turned_on = async_mock_service(hass, "switch", "turn_on")
+    async_mock_service(hass, "switch", "turn_off")
+
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 21.0},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert {e for c in opened for e in c.data["entity_id"]} == {"valve.radiator_a"}
+    assert {e for c in turned_on for e in c.data["entity_id"]} == {"switch.floor_loop"}

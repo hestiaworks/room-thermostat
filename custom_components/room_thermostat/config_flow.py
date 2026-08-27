@@ -61,7 +61,11 @@ ROOM_SCHEMA = vol.Schema(
             selector.EntitySelectorConfig(domain="climate")
         ),
         vol.Optional(CONF_HEATERS): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="switch", multiple=True)
+            # Radiator valves are valve entities; a floor loop driven by a
+            # relay is a switch. A room may have both.
+            selector.EntitySelectorConfig(
+                domain=["valve", "switch", "input_boolean"], multiple=True
+            )
         ),
     }
 )
@@ -79,7 +83,11 @@ DEVICES_SCHEMA = vol.Schema(
             selector.EntitySelectorConfig(domain="climate")
         ),
         vol.Optional(CONF_HEATERS): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="switch", multiple=True)
+            # Radiator valves are valve entities; a floor loop driven by a
+            # relay is a switch. A room may have both.
+            selector.EntitySelectorConfig(
+                domain=["valve", "switch", "input_boolean"], multiple=True
+            )
         ),
     }
 )
