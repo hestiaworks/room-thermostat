@@ -547,3 +547,63 @@ def test_a_room_with_no_heater_has_nothing_to_warm_through():
     )
     assert decision.heaters_on is False
     assert decision.sensor_lost is True
+
+
+def test_a_held_decision_says_when_to_come_back():
+    """A minimum time that blocks a change has to schedule its own retry, or
+    the change waits for whatever happens to wake the loop next."""
+    just_stopped = LoopState(
+        heaters_on=False, heaters_changed_at=1000.0, cooler_on=False, cooler_changed_at=0.0
+    )
+    decision = decide(
+        config(heat_min_off=300.0),
+        Readings(room_temperature=10.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        just_stopped,
+        now=1100.0,
+    )
+    assert decision.heaters_on is False
+    assert decision.retry_after == 200.0
+
+
+def test_nothing_held_means_nothing_to_come_back_for():
+    decision = decide(
+        config(),
+        Readings(room_temperature=18.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.heaters_on is True
+    assert decision.retry_after is None
+
+
+def test_a_gated_cooler_held_open_also_says_when():
+    running = LoopState(
+        heaters_on=False, heaters_changed_at=0.0, cooler_on=True, cooler_changed_at=1000.0
+    )
+    decision = decide(
+        cooling_config(cooling_strategy="gated", cool_min_on=900.0),
+        Readings(room_temperature=20.0, room_humidity=None, cooler_temperature=18.0),
+        Request(hvac_mode="cool", target=22.0, target_low=None, target_high=None),
+        running,
+        now=1240.0,
+    )
+    assert decision.cooler.hvac_mode == "cool"
+    assert decision.retry_after == 660.0
+
+
+def test_the_soonest_hold_is_the_one_to_come_back_for():
+    """With both sides held, waking at the later one would leave the earlier
+    change waiting past its own release."""
+    both = LoopState(
+        heaters_on=False, heaters_changed_at=1000.0, cooler_on=True, cooler_changed_at=1000.0
+    )
+    decision = decide(
+        config(has_cooler=True, has_heater=True, heat_min_off=100.0, cool_min_on=500.0),
+        Readings(room_temperature=10.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        both,
+        now=1050.0,
+    )
+    assert decision.retry_after == 50.0

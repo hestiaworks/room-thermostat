@@ -8,6 +8,7 @@ control.py, where it can be tested without a house.
 from __future__ import annotations
 
 from datetime import timedelta
+from collections.abc import Callable
 from typing import Any
 
 from homeassistant.components.climate import (
@@ -24,6 +25,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
+    async_call_later,
     async_track_state_change_event,
     async_track_time_interval,
 )
@@ -138,6 +140,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         )
         self._demand = False
         self._frost = False
+        self._retry: Callable[[], None] | None = None
         # A device per room, so its thermostat and its demand sensor group
         # together and both take the room's name.
         self._attr_device_info = DeviceInfo(
@@ -382,6 +385,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         )
         self._state = decision.state
         self._action = ACTIONS[decision.hvac_action]
+        self._schedule_retry(decision.retry_after)
         self._frost = decision.frost_active
         self._report_sensor(decision.sensor_lost)
 
@@ -454,6 +458,34 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
                 blocking=False,
             )
 
+    def _schedule_retry(self, after: float | None) -> None:
+        """Come back when a held change becomes allowed.
+
+        Without this the loop next runs on a source change or the thirty
+        second tick, so a change refused by a minimum time sits there until
+        something unrelated wakes it — which looks like the room ignoring you
+        until you ask a second time.
+        """
+        if self._retry is not None:
+            self._retry()
+            self._retry = None
+        if after is None:
+            return
+
+        # A second's grace, so the minimum has certainly elapsed on arrival.
+        self._retry = async_call_later(self.hass, after + 1, self._wake)
+
+    @callback
+    def _wake(self, _now=None) -> None:
+        """Run the loop from the event loop.
+
+        Decorated, and passed as itself rather than wrapped in a lambda: an
+        undecorated callable is run in an executor thread, and creating a task
+        from there is not safe.
+        """
+        self._retry = None
+        self.hass.async_create_task(self._apply())
+
     def _report_sensor(self, lost: bool) -> None:
         """A heating system that fails silent in winter is not acceptable."""
         issue = f"sensor_lost_{self._entry.entry_id}"
@@ -487,7 +519,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         ]
 
         @callback
-        def _changed(_: Event | None) -> None:
+        def _changed(_: Event) -> None:
             self.hass.async_create_task(self._apply())
 
         if sources:
@@ -495,6 +527,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
                 async_track_state_change_event(self.hass, sources, _changed)
             )
         self.async_on_remove(
-            async_track_time_interval(self.hass, lambda _: _changed(None), TICK)
+            async_track_time_interval(self.hass, self._wake, TICK)
         )
+        self.async_on_remove(lambda: self._schedule_retry(None))
         await self._apply()

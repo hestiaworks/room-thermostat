@@ -86,6 +86,9 @@ class Decision:
     frost_active: bool
     hvac_action: str
     sensor_lost: bool
+    # Seconds until a change held back by a minimum time could be made.
+    # Nothing else would wake the loop at that moment.
+    retry_after: float | None
     state: LoopState
 
 
@@ -96,21 +99,25 @@ def _switch(
     now: float,
     min_on: float,
     min_off: float,
-) -> bool:
+) -> tuple[bool, float]:
     """Apply minimum on and off times to a desired state.
 
     Temperature decides what we want; these decide whether we are allowed to
     act on it yet. Without them a sensor that wobbles by a tenth of a degree
     chatters a valve or short-cycles a compressor.
+
+    Returns what to do and, when a change was refused, how long until it would
+    be allowed — so the caller can come back rather than leaving the change
+    waiting for whatever happens to run the loop next.
     """
     if wants_on == currently_on:
-        return currently_on
+        return currently_on, 0.0
     elapsed = now - changed_at
     if currently_on and elapsed < min_on:
-        return True
+        return True, min_on - elapsed
     if not currently_on and elapsed < min_off:
-        return False
-    return wants_on
+        return False, min_off - elapsed
+    return wants_on, 0.0
 
 
 def _wants_heat(
@@ -161,10 +168,10 @@ def _cool(
     target: float,
     state: LoopState,
     now: float,
-) -> tuple[bool, CoolerCommand]:
+) -> tuple[bool, CoolerCommand, float]:
     room = readings.room_temperature
     if config.cooling_strategy == "gated":
-        on = _switch(
+        on, held = _switch(
             _wants_cool(room, target, state.cooler_on, config),
             state.cooler_on,
             state.cooler_changed_at,
@@ -173,10 +180,16 @@ def _cool(
             config.cool_min_off,
         )
         if on:
-            return True, CoolerCommand(hvac_mode="cool", target=config.parked_setpoint)
-        return False, CoolerCommand(hvac_mode="off", target=None)
-    return True, CoolerCommand(
-        hvac_mode="cool", target=_corrected_target(target, readings, config)
+            return (
+                True,
+                CoolerCommand(hvac_mode="cool", target=config.parked_setpoint),
+                held,
+            )
+        return False, CoolerCommand(hvac_mode="off", target=None), held
+    return (
+        True,
+        CoolerCommand(hvac_mode="cool", target=_corrected_target(target, readings, config)),
+        0.0,
     )
 
 
@@ -193,6 +206,7 @@ def decide(
     cooler: CoolerCommand | None = None
     cooler_on = False
     mode = request.hvac_mode
+    holds: list[float] = []
 
     if mode in ("dry", "fan_only") and config.has_cooler:
         cooler = CoolerCommand(hvac_mode=mode, target=None)
@@ -202,7 +216,7 @@ def decide(
         wants = _wants_heat(room, target, state.heaters_on, config)
         if config.has_cooler and config.allow_ac_heat:
             # Either/or: the unit heats this room, so the valves stay shut.
-            cooler_on = _switch(
+            cooler_on, held = _switch(
                 wants,
                 state.cooler_on,
                 state.cooler_changed_at,
@@ -210,13 +224,14 @@ def decide(
                 config.cool_min_on,
                 config.cool_min_off,
             )
+            holds.append(held)
             cooler = (
                 CoolerCommand(hvac_mode="heat", target=target)
                 if cooler_on
                 else CoolerCommand(hvac_mode="off", target=None)
             )
         elif config.has_heater:
-            heaters_on = _switch(
+            heaters_on, held = _switch(
                 wants,
                 state.heaters_on,
                 state.heaters_changed_at,
@@ -224,10 +239,12 @@ def decide(
                 config.heat_min_on,
                 config.heat_min_off,
             )
+            holds.append(held)
 
     elif mode == "cool" and config.has_cooler and room is not None:
         target = request.target if request.target is not None else 24.0
-        cooler_on, cooler = _cool(config, readings, target, state, now)
+        cooler_on, cooler, held = _cool(config, readings, target, state, now)
+        holds.append(held)
 
     elif mode == "heat_cool" and room is not None:
         low = request.target_low if request.target_low is not None else 20.0
@@ -235,7 +252,7 @@ def decide(
         # Below the low setpoint we heat, above the high one we cool, and
         # between them neither runs — so the two can never oppose each other.
         if config.has_heater and _wants_heat(room, low, state.heaters_on, config):
-            heaters_on = _switch(
+            heaters_on, held = _switch(
                 True,
                 state.heaters_on,
                 state.heaters_changed_at,
@@ -243,8 +260,10 @@ def decide(
                 config.heat_min_on,
                 config.heat_min_off,
             )
+            holds.append(held)
         elif config.has_cooler and _wants_cool(room, high, state.cooler_on, config):
-            cooler_on, cooler = _cool(config, readings, high, state, now)
+            cooler_on, cooler, held = _cool(config, readings, high, state, now)
+            holds.append(held)
 
     if sensor_lost and config.has_heater and request.hvac_mode != "off":
         heaters_on = _warm_through(state, now, config)
@@ -302,5 +321,7 @@ def decide(
         frost_active=frost_active,
         hvac_action=action,
         sensor_lost=sensor_lost,
+        # The soonest release, so a change is not left waiting past it.
+        retry_after=min((h for h in holds if h > 0), default=None),
         state=next_state,
     )

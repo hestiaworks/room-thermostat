@@ -554,3 +554,70 @@ async def test_an_inverted_valve_already_in_the_right_place_is_left_alone(
     hass.states.async_set("sensor.bedroom_temperature", "17.9")
     await hass.async_block_till_done()
     assert opened == [] and closed == []
+
+
+async def test_a_change_held_by_a_minimum_time_applies_itself_later(
+    hass: HomeAssistant, freezer
+):
+    """Turn heating on, change your mind straight away, and the minimum run
+    time refuses. That refusal has to expire on its own — otherwise the loop
+    next runs on a source change or the thirty second tick, and the room looks
+    like it ignored you until you ask a second time."""
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    hass.states.async_set("sensor.bedroom_temperature", "18.0")
+    hass.states.async_set("valve.radiator", "closed")
+    entry = await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["valve.radiator"],
+        },
+    )
+    # Long enough that the thirty second tick cannot be what rescues it.
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "heat_min_on": 120.0}
+    )
+    await hass.async_block_till_done()
+
+    async_mock_service(hass, "valve", "open_valve")
+    closed = async_mock_service(hass, "valve", "close_valve")
+
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 21.0},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    hass.states.async_set("valve.radiator", "open")
+    await hass.async_block_till_done()
+    closed.clear()
+
+    # Change your mind immediately: the minimum run time refuses.
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 15.0},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert closed == []
+
+    # Nothing else happens — no source changes, no interaction.
+    freezer.tick(timedelta(seconds=125))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done()
+    assert {e for c in closed for e in c.data["entity_id"]} == {"valve.radiator"}
+
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
