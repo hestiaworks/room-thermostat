@@ -156,3 +156,36 @@ async def test_setting_a_fan_mode_forwards_to_the_unit(hass: HomeAssistant):
         and "climate.bedroom_ac" in str(call["service_data"].get("entity_id"))
         for call in forwarded
     )
+
+
+async def test_the_temperature_limits_come_from_the_unit(hass: HomeAssistant):
+    """Advertising 7 to 35 when the unit accepts 8 to 30 offers setpoints it
+    would refuse — the same class of fault this integration exists to fix."""
+    hass.states.async_set("sensor.bedroom_temperature", "22.0")
+    hass.states.async_set(
+        "climate.bedroom_ac", "off", {"min_temp": 8, "max_temp": 30}
+    )
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+        },
+    )
+    state = hass.states.get("climate.bedroom")
+    assert state.attributes["min_temp"] == 8
+    assert state.attributes["max_temp"] == 30
+
+
+async def test_a_room_with_no_unit_keeps_sensible_limits(hass: HomeAssistant):
+    hass.states.async_set("sensor.bedroom_temperature", "22.0")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["switch.radiator"],
+        },
+    )
+    state = hass.states.get("climate.bedroom")
+    assert state.attributes["min_temp"] == 7
+    assert state.attributes["max_temp"] == 35

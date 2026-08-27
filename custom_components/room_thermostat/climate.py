@@ -203,6 +203,19 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
     # --- what the room is doing ------------------------------------------
 
     @property
+    def min_temp(self) -> float:
+        """The unit's own limit, so we never offer a setpoint it would refuse.
+        A room heated only by valves keeps Home Assistant's default range,
+        which a valve does not care about either way."""
+        limit = self._cooler_attribute("min_temp")
+        return float(limit) if limit is not None else super().min_temp
+
+    @property
+    def max_temp(self) -> float:
+        limit = self._cooler_attribute("max_temp")
+        return float(limit) if limit is not None else super().max_temp
+
+    @property
     def current_temperature(self):
         return _number(self.hass, self._sensor)
 
