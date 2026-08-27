@@ -1,0 +1,160 @@
+"""Every decision this integration makes, with nothing else in the way.
+
+This module imports nothing from Home Assistant and never reads the clock. It
+is given readings, configuration, what the user asked for and the current time,
+and it returns what each device should do. That is what lets the interesting
+behaviour — minimum run times, valve travel, frost protection — be tested in
+milliseconds instead of against a house.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+
+# hvac_action values, matching Home Assistant's climate constants without
+# importing them.
+ACTION_OFF = "off"
+ACTION_IDLE = "idle"
+ACTION_HEATING = "heating"
+ACTION_COOLING = "cooling"
+ACTION_DRYING = "drying"
+ACTION_FAN = "fan"
+
+
+@dataclass(frozen=True)
+class RoomConfig:
+    has_cooler: bool
+    has_heater: bool
+    cooling_strategy: str
+    offset_correction: bool
+    parked_setpoint: float
+    cool_cold_tolerance: float
+    cool_hot_tolerance: float
+    cool_min_on: float
+    cool_min_off: float
+    heat_cold_tolerance: float
+    heat_hot_tolerance: float
+    heat_min_on: float
+    heat_min_off: float
+    valve_travel: float
+    allow_ac_heat: bool
+    frost_temperature: float
+    frost_recovery: float
+
+
+@dataclass(frozen=True)
+class Readings:
+    room_temperature: float | None
+    room_humidity: float | None
+    cooler_temperature: float | None
+
+
+@dataclass(frozen=True)
+class Request:
+    hvac_mode: str
+    target: float | None
+    target_low: float | None
+    target_high: float | None
+
+
+@dataclass(frozen=True)
+class LoopState:
+    heaters_on: bool
+    heaters_changed_at: float
+    cooler_on: bool
+    cooler_changed_at: float
+
+
+@dataclass(frozen=True)
+class CoolerCommand:
+    hvac_mode: str
+    target: float | None
+
+
+@dataclass(frozen=True)
+class Decision:
+    heaters_on: bool
+    cooler: CoolerCommand | None
+    heat_demand: bool
+    frost_active: bool
+    hvac_action: str
+    state: LoopState
+
+
+def _switch(
+    wants_on: bool,
+    currently_on: bool,
+    changed_at: float,
+    now: float,
+    min_on: float,
+    min_off: float,
+) -> bool:
+    """Apply minimum on and off times to a desired state.
+
+    Temperature decides what we want; these decide whether we are allowed to
+    act on it yet. Without them a sensor that wobbles by a tenth of a degree
+    chatters a valve or short-cycles a compressor.
+    """
+    if wants_on == currently_on:
+        return currently_on
+    elapsed = now - changed_at
+    if currently_on and elapsed < min_on:
+        return True
+    if not currently_on and elapsed < min_off:
+        return False
+    return wants_on
+
+
+def _wants_heat(
+    room: float, target: float, currently_on: bool, config: RoomConfig
+) -> bool:
+    """Hysteresis: separate tolerances, because floors overshoot far more than
+    they undershoot."""
+    if currently_on:
+        return room < target + config.heat_hot_tolerance
+    return room <= target - config.heat_cold_tolerance
+
+
+def decide(
+    config: RoomConfig,
+    readings: Readings,
+    request: Request,
+    state: LoopState,
+    now: float,
+) -> Decision:
+    room = readings.room_temperature
+    heaters_on = False
+
+    if request.hvac_mode == "heat" and config.has_heater and room is not None:
+        target = request.target if request.target is not None else 21.0
+        heaters_on = _switch(
+            _wants_heat(room, target, state.heaters_on, config),
+            state.heaters_on,
+            state.heaters_changed_at,
+            now,
+            config.heat_min_on,
+            config.heat_min_off,
+        )
+
+    changed_at = now if heaters_on != state.heaters_on else state.heaters_changed_at
+    next_state = replace(state, heaters_on=heaters_on, heaters_changed_at=changed_at)
+
+    # Demand means the valve has had time to physically open, not that its
+    # switch was energised.
+    demand = heaters_on and (now - changed_at) >= config.valve_travel
+
+    if request.hvac_mode == "off":
+        action = ACTION_OFF
+    elif heaters_on:
+        action = ACTION_HEATING
+    else:
+        action = ACTION_IDLE
+
+    return Decision(
+        heaters_on=heaters_on,
+        cooler=None,
+        heat_demand=demand,
+        frost_active=False,
+        hvac_action=action,
+        state=next_state,
+    )
