@@ -48,49 +48,57 @@ from .const import (
     STRATEGY_PASSTHROUGH,
 )
 
+# One definition per field, used by both the add form and the options form:
+# they were copies, and copies drift.
+TEMPERATURE_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(
+        # A helper is allowed on purpose. An input_number you can drag is how
+        # the deadband and the minimum times get exercised without waiting for
+        # a real room to change temperature.
+        filter=[
+            selector.EntityFilterSelectorConfig(
+                domain="sensor", device_class="temperature"
+            ),
+            selector.EntityFilterSelectorConfig(domain=["input_number", "number"]),
+        ]
+    )
+)
+
+HUMIDITY_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(
+        filter=[
+            selector.EntityFilterSelectorConfig(
+                domain="sensor", device_class="humidity"
+            ),
+            selector.EntityFilterSelectorConfig(domain=["input_number", "number"]),
+        ]
+    )
+)
+
+COOLER_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="climate")
+)
+
+HEATERS_SELECTOR = selector.EntitySelector(
+    # Radiator valves are valve entities; a floor loop driven by a relay is a
+    # switch. A room may have both.
+    selector.EntitySelectorConfig(
+        domain=["valve", "switch", "input_boolean"], multiple=True
+    )
+)
+
+DEVICE_FIELDS = {
+    vol.Optional(CONF_TEMPERATURE_SENSOR): TEMPERATURE_SELECTOR,
+    vol.Optional(CONF_HUMIDITY_SENSOR): HUMIDITY_SELECTOR,
+    vol.Optional(CONF_COOLER): COOLER_SELECTOR,
+    vol.Optional(CONF_HEATERS): HEATERS_SELECTOR,
+}
+
 ROOM_SCHEMA = vol.Schema(
-    {
-        vol.Required("name"): selector.TextSelector(),
-        vol.Optional(CONF_TEMPERATURE_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
-        ),
-        vol.Optional(CONF_HUMIDITY_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
-        ),
-        vol.Optional(CONF_COOLER): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="climate")
-        ),
-        vol.Optional(CONF_HEATERS): selector.EntitySelector(
-            # Radiator valves are valve entities; a floor loop driven by a
-            # relay is a switch. A room may have both.
-            selector.EntitySelectorConfig(
-                domain=["valve", "switch", "input_boolean"], multiple=True
-            )
-        ),
-    }
+    {vol.Required("name"): selector.TextSelector(), **DEVICE_FIELDS}
 )
 
-
-DEVICES_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_TEMPERATURE_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
-        ),
-        vol.Optional(CONF_HUMIDITY_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
-        ),
-        vol.Optional(CONF_COOLER): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="climate")
-        ),
-        vol.Optional(CONF_HEATERS): selector.EntitySelector(
-            # Radiator valves are valve entities; a floor loop driven by a
-            # relay is a switch. A room may have both.
-            selector.EntitySelectorConfig(
-                domain=["valve", "switch", "input_boolean"], multiple=True
-            )
-        ),
-    }
-)
+DEVICES_SCHEMA = vol.Schema(DEVICE_FIELDS)
 
 
 def default_options() -> dict[str, Any]:

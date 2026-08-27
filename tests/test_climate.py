@@ -386,3 +386,40 @@ async def test_valves_and_switches_can_heat_the_same_room(hass: HomeAssistant):
 
     assert {e for c in opened for e in c.data["entity_id"]} == {"valve.radiator_a"}
     assert {e for c in turned_on for e in c.data["entity_id"]} == {"switch.floor_loop"}
+
+
+async def test_a_helper_can_stand_in_for_a_temperature_sensor(hass: HomeAssistant):
+    """An input_number you can drag is how the deadband and the minimum times
+    get exercised without waiting for a real room to change temperature."""
+    hass.states.async_set("input_number.fake_room_temperature", "24.0")
+    hass.states.async_set("valve.radiator_a", "closed")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "input_number.fake_room_temperature",
+            CONF_HEATERS: ["valve.radiator_a"],
+        },
+    )
+    assert hass.states.get("climate.bedroom").attributes["current_temperature"] == 24.0
+
+    opened = async_mock_service(hass, "valve", "open_valve")
+    async_mock_service(hass, "valve", "close_valve")
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 21.0},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert opened == []
+
+    # Drag the helper below the target and the room must respond to it.
+    hass.states.async_set("input_number.fake_room_temperature", "18.0")
+    await hass.async_block_till_done()
+    assert {e for c in opened for e in c.data["entity_id"]} == {"valve.radiator_a"}

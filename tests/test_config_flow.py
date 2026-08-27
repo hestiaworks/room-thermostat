@@ -313,3 +313,25 @@ async def test_a_room_cannot_be_its_own_air_conditioner(hass: HomeAssistant):
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {CONF_COOLER: "own_entity"}
+
+
+def test_a_helper_can_be_offered_as_a_temperature_source():
+    """Selecting an input_number is what makes the behaviour testable without
+    a real room, so the picker has to offer one."""
+    from custom_components.room_thermostat.config_flow import DEVICES_SCHEMA
+    from custom_components.room_thermostat.const import CONF_TEMPERATURE_SENSOR
+
+    for key, value in DEVICES_SCHEMA.schema.items():
+        if key.schema == CONF_TEMPERATURE_SENSOR:
+            domains = {
+                domain
+                for entry in value.config["filter"]
+                for domain in (
+                    entry["domain"]
+                    if isinstance(entry["domain"], list)
+                    else [entry["domain"]]
+                )
+            }
+            assert {"sensor", "input_number", "number"} <= domains
+            return
+    raise AssertionError("no temperature sensor field in the schema")
