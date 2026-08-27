@@ -45,6 +45,8 @@ class RoomConfig:
     allow_ac_heat: bool
     frost_temperature: float
     frost_recovery: float
+    warm_on: float
+    warm_off: float
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,7 @@ class Decision:
     heat_demand: bool
     frost_active: bool
     hvac_action: str
+    sensor_lost: bool
     state: LoopState
 
 
@@ -139,6 +142,19 @@ def _corrected_target(target: float, readings: Readings, config: RoomConfig) -> 
     return target - offset
 
 
+def _warm_through(state: LoopState, now: float, config: RoomConfig) -> bool:
+    """A blind duty cycle for a room whose sensor has gone.
+
+    Deliberately slow in both directions: without a reading we cannot tell
+    whether the room is at 4 degrees or 24, so this must be incapable of doing
+    much harm either way while still being incapable of letting a pipe freeze.
+    """
+    elapsed = now - state.heaters_changed_at
+    if state.heaters_on:
+        return elapsed < config.warm_on
+    return elapsed >= config.warm_off
+
+
 def _cool(
     config: RoomConfig,
     readings: Readings,
@@ -172,6 +188,7 @@ def decide(
     now: float,
 ) -> Decision:
     room = readings.room_temperature
+    sensor_lost = room is None
     heaters_on = False
     cooler: CoolerCommand | None = None
     cooler_on = False
@@ -229,6 +246,9 @@ def decide(
         elif config.has_cooler and _wants_cool(room, high, state.cooler_on, config):
             cooler_on, cooler = _cool(config, readings, high, state, now)
 
+    if sensor_lost and config.has_heater and request.hvac_mode != "off":
+        heaters_on = _warm_through(state, now, config)
+
     # Frost protection overrides intent, which is the point of it: a
     # thermostat switched off must not be able to freeze a pipe. It applies in
     # every mode, and only a room with a heater can be protected.
@@ -281,5 +301,6 @@ def decide(
         heat_demand=demand,
         frost_active=frost_active,
         hvac_action=action,
+        sensor_lost=sensor_lost,
         state=next_state,
     )

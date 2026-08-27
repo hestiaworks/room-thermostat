@@ -30,6 +30,8 @@ def config(**overrides) -> RoomConfig:
         allow_ac_heat=False,
         frost_temperature=5.0,
         frost_recovery=1.0,
+        warm_on=600.0,
+        warm_off=3000.0,
     )
     return RoomConfig(**{**base, **overrides})
 
@@ -480,3 +482,68 @@ def test_losing_the_sensor_stops_control_without_commanding_anything():
     )
     assert decision.heaters_on is False
     assert decision.hvac_action == "idle"
+
+
+def test_a_lost_sensor_is_reported_so_a_human_hears_about_it():
+    decision = decide(
+        config(),
+        Readings(room_temperature=None, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.sensor_lost is True
+
+
+def test_a_working_sensor_is_not_reported_as_lost():
+    decision = decide(
+        config(),
+        Readings(room_temperature=20.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.sensor_lost is False
+
+
+def test_a_lost_sensor_warms_the_room_through_periodically():
+    """We cannot measure the room, so we cannot leave it cold all winter
+    either. A duty cycle is the compromise: it cannot overheat a room quickly
+    and it cannot let one freeze slowly."""
+    off_long_enough = LoopState(
+        heaters_on=False, heaters_changed_at=0.0, cooler_on=False, cooler_changed_at=0.0
+    )
+    decision = decide(
+        config(warm_on=600.0, warm_off=3000.0),
+        Readings(room_temperature=None, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        off_long_enough,
+        now=3000.0,
+    )
+    assert decision.heaters_on is True
+
+
+def test_the_warm_through_stops_after_its_run():
+    on_long_enough = LoopState(
+        heaters_on=True, heaters_changed_at=1000.0, cooler_on=False, cooler_changed_at=0.0
+    )
+    decision = decide(
+        config(warm_on=600.0, warm_off=3000.0),
+        Readings(room_temperature=None, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        on_long_enough,
+        now=1700.0,
+    )
+    assert decision.heaters_on is False
+
+
+def test_a_room_with_no_heater_has_nothing_to_warm_through():
+    decision = decide(
+        config(has_heater=False, has_cooler=True),
+        Readings(room_temperature=None, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        idle(),
+        now=5000.0,
+    )
+    assert decision.heaters_on is False
+    assert decision.sensor_lost is True
