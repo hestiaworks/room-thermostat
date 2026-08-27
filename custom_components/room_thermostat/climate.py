@@ -117,6 +117,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
             cooler_changed_at=0.0,
         )
         self._demand = False
+        self._frost = False
         # A device per room, so its thermostat and its demand sensor group
         # together and both take the room's name.
         self._attr_device_info = DeviceInfo(
@@ -201,6 +202,31 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         return self._cooler_attribute("preset_mode")
 
     # --- what the room is doing ------------------------------------------
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """What this room is working with, so 'nothing happened' can be
+        diagnosed from one state dump rather than from guesswork."""
+        watched = [
+            entity
+            for entity in (self._sensor, self._humidity, self._cooler, *self._heaters)
+            if entity
+        ]
+        missing = [
+            entity
+            for entity in watched
+            if (state := self.hass.states.get(entity)) is None
+            or state.state in ("unavailable", "unknown")
+        ]
+        return {
+            "temperature_sensor": self._sensor,
+            "humidity_sensor": self._humidity,
+            "cooler": self._cooler,
+            "heaters": self._heaters,
+            "heat_demand": self._demand,
+            "frost_protection": self._frost,
+            "unavailable_devices": missing,
+        }
 
     @property
     def min_temp(self) -> float:
@@ -335,6 +361,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         )
         self._state = decision.state
         self._action = ACTIONS[decision.hvac_action]
+        self._frost = decision.frost_active
         self._report_sensor(decision.sensor_lost)
 
         await self._command(decision)

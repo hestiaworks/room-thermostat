@@ -232,3 +232,27 @@ async def test_a_room_reports_one_kind_of_setpoint_at_a_time(hass: HomeAssistant
     assert ranged.get("temperature") is None
     assert ranged.get("target_temp_low") is not None
     assert ranged.get("target_temp_high") is not None
+
+
+async def test_the_room_reports_what_it_is_working_with(hass: HomeAssistant):
+    """Diagnosing 'nothing happened' from outside means guessing at which
+    entities the room actually holds and whether it can see them."""
+    hass.states.async_set("sensor.bedroom_temperature", "24.2")
+    hass.states.async_set("climate.bedroom_ac", "off")
+    hass.states.async_set("switch.radiator_a", "off")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+            CONF_HEATERS: ["switch.radiator_a", "switch.missing"],
+        },
+    )
+    attributes = hass.states.get("climate.bedroom").attributes
+    assert attributes["temperature_sensor"] == "sensor.bedroom_temperature"
+    assert attributes["cooler"] == "climate.bedroom_ac"
+    assert attributes["heaters"] == ["switch.radiator_a", "switch.missing"]
+    assert attributes["heat_demand"] is False
+    assert attributes["frost_protection"] is False
+    # The one that matters when a room seems inert: a device it cannot see.
+    assert attributes["unavailable_devices"] == ["switch.missing"]
