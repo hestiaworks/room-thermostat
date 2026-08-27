@@ -229,6 +229,18 @@ def decide(
         elif config.has_cooler and _wants_cool(room, high, state.cooler_on, config):
             cooler_on, cooler = _cool(config, readings, high, state, now)
 
+    # Frost protection overrides intent, which is the point of it: a
+    # thermostat switched off must not be able to freeze a pipe. It applies in
+    # every mode, and only a room with a heater can be protected.
+    frost_active = False
+    if config.has_heater and room is not None:
+        release = config.frost_temperature + config.frost_recovery
+        below = room < config.frost_temperature
+        recovering = state.heaters_on and room < release
+        if below or recovering:
+            frost_active = True
+            heaters_on = True
+
     if config.has_cooler and cooler is None:
         cooler = CoolerCommand(hvac_mode="off", target=None)
 
@@ -248,7 +260,9 @@ def decide(
     # switch was energised.
     demand = heaters_on and (now - changed_at) >= config.valve_travel
 
-    if mode == "off":
+    if frost_active:
+        action = ACTION_HEATING
+    elif mode == "off":
         action = ACTION_OFF
     elif mode == "dry":
         action = ACTION_DRYING
@@ -265,7 +279,7 @@ def decide(
         heaters_on=heaters_on,
         cooler=cooler,
         heat_demand=demand,
-        frost_active=False,
+        frost_active=frost_active,
         hvac_action=action,
         state=next_state,
     )

@@ -399,3 +399,84 @@ def test_a_room_with_no_cooler_is_never_sent_a_cooler_command():
         now=1000.0,
     )
     assert decision.cooler is None
+
+
+def test_a_freezing_room_is_heated_even_with_the_thermostat_off():
+    """Safety outranks intent. An off thermostat must not freeze a pipe."""
+    decision = decide(
+        config(frost_temperature=5.0),
+        Readings(room_temperature=4.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="off", target=21.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.frost_active is True
+    assert decision.heaters_on is True
+    assert decision.hvac_action == "heating"
+
+
+def test_frost_protection_holds_until_the_room_recovers():
+    """Releasing at exactly the threshold would chatter the valve."""
+    frosting = LoopState(
+        heaters_on=True, heaters_changed_at=0.0, cooler_on=False, cooler_changed_at=0.0
+    )
+    still_cold = decide(
+        config(frost_temperature=5.0, frost_recovery=1.0),
+        Readings(room_temperature=5.4, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="off", target=21.0, target_low=None, target_high=None),
+        frosting,
+        now=5000.0,
+    )
+    assert still_cold.frost_active is True
+
+    recovered = decide(
+        config(frost_temperature=5.0, frost_recovery=1.0),
+        Readings(room_temperature=6.5, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="off", target=21.0, target_low=None, target_high=None),
+        frosting,
+        now=5000.0,
+    )
+    assert recovered.frost_active is False
+    assert recovered.heaters_on is False
+
+
+def test_frost_protection_raises_demand_like_any_other_call_for_heat():
+    frosting = LoopState(
+        heaters_on=True, heaters_changed_at=1000.0, cooler_on=False, cooler_changed_at=0.0
+    )
+    decision = decide(
+        config(valve_travel=180.0),
+        Readings(room_temperature=4.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="off", target=21.0, target_low=None, target_high=None),
+        frosting,
+        now=1200.0,
+    )
+    assert decision.heat_demand is True
+
+
+def test_a_room_with_no_heater_cannot_be_frost_protected():
+    decision = decide(
+        config(has_heater=False, has_cooler=True),
+        Readings(room_temperature=4.0, room_humidity=None, cooler_temperature=20.0),
+        Request(hvac_mode="off", target=21.0, target_low=None, target_high=None),
+        idle(),
+        now=1000.0,
+    )
+    assert decision.frost_active is False
+    assert decision.heaters_on is False
+
+
+def test_losing_the_sensor_stops_control_without_commanding_anything():
+    """Never run a loop against a reading we no longer have."""
+    running = LoopState(
+        heaters_on=True, heaters_changed_at=0.0, cooler_on=False, cooler_changed_at=0.0
+    )
+    decision = decide(
+        config(),
+        Readings(room_temperature=None, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=21.0, target_low=None, target_high=None),
+        running,
+        now=5000.0,
+    )
+    assert decision.heaters_on is False
+    assert decision.hvac_action == "idle"
