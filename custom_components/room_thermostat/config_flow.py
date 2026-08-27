@@ -85,6 +85,15 @@ def default_options() -> dict[str, Any]:
     }
 
 
+def _problems(user_input: dict[str, Any]) -> dict[str, str]:
+    if not user_input.get(CONF_TEMPERATURE_SENSOR):
+        return {CONF_TEMPERATURE_SENSOR: "required"}
+    if not user_input.get(CONF_COOLER) and not user_input.get(CONF_HEATERS):
+        # A room that can neither heat nor cool is a thermometer.
+        return {"base": "no_devices"}
+    return {}
+
+
 class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -93,12 +102,8 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            if not user_input.get(CONF_TEMPERATURE_SENSOR):
-                errors[CONF_TEMPERATURE_SENSOR] = "required"
-            elif not user_input.get(CONF_COOLER) and not user_input.get(CONF_HEATERS):
-                # A room that can neither heat nor cool is a thermometer.
-                errors["base"] = "no_devices"
-            else:
+            errors = _problems(user_input)
+            if not errors:
                 return self.async_create_entry(
                     title=user_input["name"],
                     data=user_input,
@@ -106,6 +111,32 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         return self.async_show_form(
             step_id="user", data_schema=ROOM_SCHEMA, errors=errors
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Change which sensors and devices a room uses.
+
+        Deleting and recreating the room would work, and would also take its
+        history, its entity ids and every dashboard card pointing at them. The
+        tunables are left alone: they live in the entry's options and are
+        edited separately.
+        """
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = _problems(user_input)
+            if not errors:
+                return self.async_update_reload_and_abort(
+                    entry, title=user_input["name"], data=user_input
+                )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                ROOM_SCHEMA, user_input or entry.data
+            ),
+            errors=errors,
         )
 
     @staticmethod

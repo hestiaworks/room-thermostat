@@ -71,3 +71,107 @@ async def test_tunables_start_at_their_documented_defaults(hass: HomeAssistant):
         },
     )
     assert result["options"]["parked_setpoint"] == DEFAULT_PARKED_SETPOINT
+
+
+async def test_a_rooms_devices_can_be_changed_after_it_is_created(hass: HomeAssistant):
+    """Adding a valve to an existing room must not mean deleting the room:
+    that would take its history, its entity ids and its dashboard cards."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.room_thermostat.config_flow import default_options
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Bedroom",
+        data={
+            "name": "Bedroom",
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+        },
+        options=default_options(),
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+    assert result["type"] == FlowResultType.FORM
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "name": "Bedroom",
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+            CONF_HEATERS: ["switch.bedroom_radiator"],
+        },
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_HEATERS] == ["switch.bedroom_radiator"]
+
+    # Reconfiguring reloads the room, which starts its control loop. Let the
+    # reload finish before unloading, or it recreates the entity afterwards.
+    await hass.async_block_till_done()
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_reconfiguring_still_insists_on_a_temperature_sensor(hass: HomeAssistant):
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.room_thermostat.config_flow import default_options
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Bedroom",
+        data={
+            "name": "Bedroom",
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+        },
+        options=default_options(),
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"name": "Bedroom", CONF_COOLER: "climate.bedroom_ac"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_TEMPERATURE_SENSOR: "required"}
+
+
+async def test_reconfiguring_keeps_the_tunables_it_was_not_asked_about(
+    hass: HomeAssistant,
+):
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.room_thermostat.config_flow import default_options
+
+    options = {**default_options(), "parked_setpoint": 16.0}
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Bedroom",
+        data={
+            "name": "Bedroom",
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+        },
+        options=options,
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+    await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "name": "Bedroom",
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+            CONF_HEATERS: ["switch.bedroom_radiator"],
+        },
+    )
+    assert entry.options["parked_setpoint"] == 16.0
+
+    await hass.async_block_till_done()
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

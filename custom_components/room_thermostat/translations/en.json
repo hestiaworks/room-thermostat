@@ -11,11 +11,25 @@
           "cooler": "Air conditioner",
           "heaters": "Heating valves"
         }
+      },
+      "reconfigure": {
+        "title": "Change this room's devices",
+        "description": "Add or replace the sensors, air conditioner and heating valves this room uses. Its tuning settings are left as they are.",
+        "data": {
+          "name": "Room name",
+          "temperature_sensor": "Room temperature sensor",
+          "humidity_sensor": "Room humidity sensor",
+          "cooler": "Air conditioner",
+          "heaters": "Heating valves"
+        }
       }
     },
     "error": {
       "required": "A room temperature sensor is required.",
       "no_devices": "Choose an air conditioner, one or more heating valves, or both."
+    },
+    "abort": {
+      "reconfigure_successful": "The room's devices were updated."
     }
   },
   "options": {
