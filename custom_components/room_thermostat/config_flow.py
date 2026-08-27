@@ -93,8 +93,25 @@ DEVICE_FIELDS = {
     vol.Optional(CONF_HUMIDITY_SENSOR): HUMIDITY_SELECTOR,
     vol.Optional(CONF_COOLER): COOLER_SELECTOR,
     vol.Optional(CONF_HEATERS): HEATERS_SELECTOR,
-    vol.Optional(CONF_INVERTED_HEATERS): HEATERS_SELECTOR,
 }
+
+
+def inverted_field(heaters: list[str]) -> dict[Any, Any]:
+    """Offer inversion only for heaters the room actually drives.
+
+    A free entity picker could name something the room does not control, and
+    the only thing to do about it was refuse the form. Offering the room's own
+    heaters makes that mistake unavailable rather than rejected.
+    """
+    if not heaters:
+        return {}
+    return {
+        vol.Optional(CONF_INVERTED_HEATERS): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=list(heaters), multiple=True, mode=selector.SelectSelectorMode.LIST
+            )
+        )
+    }
 
 ROOM_SCHEMA = vol.Schema(
     {vol.Required("name"): selector.TextSelector(), **DEVICE_FIELDS}
@@ -248,10 +265,13 @@ class RoomThermostatOptionsFlow(OptionsFlow):
                     data={**self.config_entry.options, **chosen}
                 )
         current = user_input or sources(self.config_entry)
+        schema = vol.Schema(
+            {**DEVICE_FIELDS, **inverted_field(current.get(CONF_HEATERS) or [])}
+        )
         return self.async_show_form(
             step_id="devices",
             data_schema=self.add_suggested_values_to_schema(
-                DEVICES_SCHEMA, {k: v for k, v in current.items() if v}
+                schema, {k: v for k, v in current.items() if v}
             ),
             errors=errors,
         )
