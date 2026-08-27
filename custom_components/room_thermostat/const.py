@@ -37,3 +37,9 @@ DEFAULT_FROST_TEMPERATURE = 5.0
 # How far above the frost temperature the room must climb before frost
 # protection releases, so it cannot chatter at the threshold.
 DEFAULT_FROST_RECOVERY = 1.0
+
+SIGNAL_DEMAND = "room_thermostat_demand"
+# The blind duty cycle used when a room's sensor is unavailable: ten minutes of
+# heat an hour, which cannot overheat a room quickly nor let one freeze slowly.
+DEFAULT_WARM_ON = 600.0
+DEFAULT_WARM_OFF = 3000.0
