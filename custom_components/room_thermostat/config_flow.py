@@ -96,7 +96,7 @@ DEVICE_FIELDS = {
 }
 
 
-def inverted_field(heaters: list[str]) -> dict[Any, Any]:
+def inverted_field(hass: HomeAssistant, heaters: list[str]) -> dict[Any, Any]:
     """Offer inversion only for heaters the room actually drives.
 
     A free entity picker could name something the room does not control, and
@@ -105,10 +105,20 @@ def inverted_field(heaters: list[str]) -> dict[Any, Any]:
     """
     if not heaters:
         return {}
+
+    def label(entity_id: str) -> str:
+        state = hass.states.get(entity_id)
+        name = state.attributes.get("friendly_name") if state else None
+        # The id is unreadable at a glance; fall back to it only when the
+        # entity is gone and there is no name to show.
+        return name or entity_id
+
     return {
         vol.Optional(CONF_INVERTED_HEATERS): selector.SelectSelector(
             selector.SelectSelectorConfig(
-                options=list(heaters), multiple=True, mode=selector.SelectSelectorMode.LIST
+                options=[{"value": h, "label": label(h)} for h in heaters],
+                multiple=True,
+                mode=selector.SelectSelectorMode.LIST,
             )
         )
     }
@@ -142,10 +152,31 @@ def _group(fields: dict[Any, Any], collapsed: bool) -> Any:
     return section(vol.Schema(fields), {"collapsed": collapsed})
 
 
-def tuning_schema(current: dict[str, Any]) -> vol.Schema:
-    """The control settings, grouped by the device they are about."""
+def room_schema(
+    hass: HomeAssistant, current: dict[str, Any], chosen: dict[str, Any]
+) -> vol.Schema:
+    """Everything about a room, on one form, grouped by what it is about.
+
+    Reaching a setting used to mean a menu and then a second dialog. The
+    groups do that job without the nesting.
+    """
     return vol.Schema(
         {
+            vol.Required("sensors"): _group(
+                {
+                    vol.Optional(CONF_TEMPERATURE_SENSOR): TEMPERATURE_SELECTOR,
+                    vol.Optional(CONF_HUMIDITY_SENSOR): HUMIDITY_SELECTOR,
+                },
+                collapsed=False,
+            ),
+            vol.Required("devices"): _group(
+                {
+                    vol.Optional(CONF_COOLER): COOLER_SELECTOR,
+                    vol.Optional(CONF_HEATERS): HEATERS_SELECTOR,
+                    **inverted_field(hass, chosen.get(CONF_HEATERS) or []),
+                },
+                collapsed=False,
+            ),
             vol.Required("cooling"): _group(
                 {
                     vol.Required(
@@ -341,57 +372,37 @@ class RoomThermostatOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        return self.async_show_menu(
-            step_id="init", menu_options=["devices", "tuning"]
-        )
-
-    async def async_step_devices(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """The sensors and devices this room uses."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = _problems(self.hass, user_input)
-            if not errors:
-                # Every source key is written, including the ones left empty,
-                # so clearing a device clears it instead of falling back to
-                # whatever the room used before.
-                chosen = {key: user_input.get(key) for key in SOURCE_KEYS}
-                return self.async_create_entry(
-                    data={**self.config_entry.options, **chosen}
-                )
-        current = user_input or sources(self.config_entry)
-        schema = vol.Schema(
-            {**DEVICE_FIELDS, **inverted_field(current.get(CONF_HEATERS) or [])}
-        )
-        return self.async_show_form(
-            step_id="devices",
-            data_schema=self.add_suggested_values_to_schema(
-                schema, {k: v for k, v in current.items() if v}
-            ),
-            errors=errors,
-        )
-
-    async def async_step_tuning(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """How the room controls, grouped by which device it is about.
-
-        Eleven bare numbers in one column said nothing about which belonged
-        together. The grouping is presentation only: everything that reads
-        these expects them flat, beside the sources.
-        """
-        if user_input is not None:
-            flattened = {
+            flat = {
                 key: value
                 for group in user_input.values()
                 for key, value in group.items()
             }
-            return self.async_create_entry(
-                data={**self.config_entry.options, **flattened}
-            )
+            # Every source key is written, including the ones left empty, so
+            # clearing a device clears it rather than falling back to what the
+            # room used before.
+            flat.update({key: flat.get(key) for key in SOURCE_KEYS})
+            errors = _problems(self.hass, flat)
+            if not errors:
+                return self.async_create_entry(
+                    data={**self.config_entry.options, **flat}
+                )
 
+        chosen = sources(self.config_entry)
         current = {**default_options(), **self.config_entry.options}
+        suggested = {
+            "sensors": {k: v for k, v in chosen.items() if v and "sensor" in k},
+            "devices": {
+                k: v
+                for k, v in chosen.items()
+                if v and k in (CONF_COOLER, CONF_HEATERS, CONF_INVERTED_HEATERS)
+            },
+        }
         return self.async_show_form(
-            step_id="tuning", data_schema=tuning_schema(current)
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                room_schema(self.hass, current, chosen), suggested
+            ),
+            errors=errors,
         )

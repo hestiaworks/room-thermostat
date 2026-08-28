@@ -39,25 +39,28 @@
     "step": {
       "init": {
         "title": "Room settings",
-        "menu_options": {
-          "devices": "Sensors and devices",
-          "tuning": "How it controls"
-        }
-      },
-      "devices": {
-        "title": "Sensors and devices",
-        "description": "Which sensors this room reads and which devices it drives. The temperature sensor is required; it is what the room is controlled against instead of the air conditioner's internal sensor. Normally-open actuators, which are energised to stop heat rather than to let it through. Leave empty unless a valve behaves backwards.",
-        "data": {
-          "temperature_sensor": "Room temperature sensor",
-          "humidity_sensor": "Room humidity sensor",
-          "cooler": "Air conditioner",
-          "heaters": "Heating valves",
-          "inverted_heaters": "Heaters wired the other way round (must also be listed above)"
-        }
-      },
-      "tuning": {
-        "title": "How this room controls",
         "sections": {
+          "sensors": {
+            "name": "Sensors",
+            "description": "What this room reads. The temperature sensor is required — it is what the room is controlled against, instead of the air conditioner's internal sensor.",
+            "data": {
+              "temperature_sensor": "Room temperature",
+              "humidity_sensor": "Room humidity"
+            }
+          },
+          "devices": {
+            "name": "Devices",
+            "description": "What this room drives. A room with no air conditioner offers no cooling; one with no valves offers no heat.",
+            "data": {
+              "cooler": "Air conditioner",
+              "heaters": "Heating valves",
+              "inverted_heaters": "Wired the other way round"
+            },
+            "data_description": {
+              "heaters": "Radiator valves are valve entities; a floor loop driven by a relay is a switch.",
+              "inverted_heaters": "Normally-open actuators, energised to stop heat rather than to pass it. Tick any valve that behaves backwards."
+            }
+          },
           "cooling": {
             "name": "Cooling",
             "description": "How the air conditioner is driven.",

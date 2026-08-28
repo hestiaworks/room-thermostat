@@ -178,95 +178,6 @@ async def test_reconfiguring_keeps_the_tunables_it_was_not_asked_about(
     await hass.async_block_till_done()
 
 
-async def test_the_options_door_leads_to_both_devices_and_tuning(hass: HomeAssistant):
-    """A helper gets exactly one configuration entry point in the interface,
-    so everything editable has to be reachable through it."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-    from custom_components.room_thermostat.config_flow import default_options
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Living Room",
-        data={"name": "Living Room"},
-        options={
-            **default_options(),
-            CONF_TEMPERATURE_SENSOR: "sensor.living_room_temperature",
-            CONF_COOLER: "climate.living_room_ac",
-        },
-    )
-    entry.add_to_hass(hass)
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["type"] == FlowResultType.MENU
-    assert set(result["menu_options"]) == {"devices", "tuning"}
-
-
-async def test_devices_can_be_changed_from_the_options(hass: HomeAssistant):
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-    from custom_components.room_thermostat.config_flow import default_options
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Living Room",
-        data={"name": "Living Room"},
-        options={
-            **default_options(),
-            CONF_TEMPERATURE_SENSOR: "sensor.living_room_temperature",
-            CONF_COOLER: "climate.living_room_ac",
-        },
-    )
-    entry.add_to_hass(hass)
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "devices"}
-    )
-    assert result["type"] == FlowResultType.FORM
-
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"],
-        {
-            CONF_TEMPERATURE_SENSOR: "sensor.a_better_thermometer",
-            CONF_COOLER: "climate.living_room_ac",
-            CONF_HEATERS: ["switch.living_room_radiator"],
-        },
-    )
-    assert result["type"] == FlowResultType.CREATE_ENTRY
-    await hass.async_block_till_done()
-    assert entry.options[CONF_TEMPERATURE_SENSOR] == "sensor.a_better_thermometer"
-    assert entry.options[CONF_HEATERS] == ["switch.living_room_radiator"]
-    # Changing devices must not reset the tuning.
-    assert entry.options["parked_setpoint"] == 17.0
-
-
-async def test_changing_devices_still_insists_on_a_temperature_sensor(
-    hass: HomeAssistant,
-):
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-    from custom_components.room_thermostat.config_flow import default_options
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Living Room",
-        data={"name": "Living Room"},
-        options={**default_options(), CONF_COOLER: "climate.living_room_ac"},
-    )
-    entry.add_to_hass(hass)
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "devices"}
-    )
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_COOLER: "climate.living_room_ac"}
-    )
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_TEMPERATURE_SENSOR: "required"}
-
-
 async def test_a_room_created_before_the_move_still_finds_its_devices(
     hass: HomeAssistant,
 ):
@@ -365,119 +276,8 @@ async def test_changing_one_source_does_not_wipe_the_others(hass: HomeAssistant)
     assert found[CONF_INVERTED_HEATERS] == ["valve.radiator"]
 
 
-async def test_clearing_a_source_in_the_form_really_clears_it(hass: HomeAssistant):
-    """Leaving a field empty must remove the device, not fall back to what the
-    room used before."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-    from custom_components.room_thermostat.config_flow import default_options, sources
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Living Room",
-        data={"name": "Living Room"},
-        options={
-            **default_options(),
-            CONF_TEMPERATURE_SENSOR: "sensor.living_room_temperature",
-            CONF_COOLER: "climate.living_room_ac",
-            CONF_HEATERS: ["valve.radiator"],
-        },
-    )
-    entry.add_to_hass(hass)
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "devices"}
-    )
-    await hass.config_entries.options.async_configure(
-        result["flow_id"],
-        {
-            CONF_TEMPERATURE_SENSOR: "sensor.living_room_temperature",
-            CONF_HEATERS: ["valve.radiator"],
-        },
-    )
-    await hass.async_block_till_done()
-    assert sources(entry)[CONF_COOLER] is None
-    await hass.config_entries.async_unload(entry.entry_id)
-    await hass.async_block_till_done()
-
-
-async def test_inversion_is_offered_only_for_heaters_the_room_drives(
-    hass: HomeAssistant,
-):
-    """A free picker that can name something invalid, then rejects it, is a
-    worse design than one that cannot name it."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-    from custom_components.room_thermostat.config_flow import default_options
-    from custom_components.room_thermostat.const import CONF_INVERTED_HEATERS
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Living Room",
-        data={"name": "Living Room"},
-        options={
-            **default_options(),
-            CONF_TEMPERATURE_SENSOR: "sensor.living_room_temperature",
-            CONF_HEATERS: ["valve.office_battery", "valve.spare"],
-        },
-    )
-    entry.add_to_hass(hass)
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "devices"}
-    )
-    for key, value in result["data_schema"].schema.items():
-        if key.schema == CONF_INVERTED_HEATERS:
-            offered = {
-                option["value"] if isinstance(option, dict) else option
-                for option in value.config["options"]
-            }
-            assert offered == {"valve.office_battery", "valve.spare"}
-            break
-    else:
-        raise AssertionError("no inverted-heaters field was offered")
-
-    await hass.config_entries.async_unload(entry.entry_id)
-    await hass.async_block_till_done()
-
-
-async def test_inversion_is_not_offered_before_there_are_heaters(hass: HomeAssistant):
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-    from custom_components.room_thermostat.config_flow import default_options
-    from custom_components.room_thermostat.const import CONF_INVERTED_HEATERS
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Living Room",
-        data={"name": "Living Room"},
-        options={
-            **default_options(),
-            CONF_TEMPERATURE_SENSOR: "sensor.living_room_temperature",
-            CONF_COOLER: "climate.living_room_ac",
-        },
-    )
-    entry.add_to_hass(hass)
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "devices"}
-    )
-    assert not any(
-        key.schema == CONF_INVERTED_HEATERS for key in result["data_schema"].schema
-    )
-
-    await hass.config_entries.async_unload(entry.entry_id)
-    await hass.async_block_till_done()
-
-
-async def test_the_tuning_form_is_grouped_rather_than_one_long_list(
-    hass: HomeAssistant,
-):
-    """Eleven bare numbers in one column tells you nothing about which belong
-    together or what they do."""
+async def room(hass: HomeAssistant, **options):
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     from custom_components.room_thermostat.config_flow import default_options
@@ -486,73 +286,89 @@ async def test_the_tuning_form_is_grouped_rather_than_one_long_list(
         domain=DOMAIN,
         title="Living Room",
         data={"name": "Living Room"},
-        options={**default_options(), CONF_TEMPERATURE_SENSOR: "sensor.t",
-                 CONF_COOLER: "climate.ac"},
+        options={**default_options(), **options},
     )
     entry.add_to_hass(hass)
+    return entry
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "tuning"}
+
+async def test_everything_is_configured_on_one_form(hass: HomeAssistant):
+    """Two nested dialogs to reach a setting was ceremony. One form, grouped."""
+    entry = await room(
+        hass,
+        temperature_sensor="sensor.t",
+        cooler="climate.ac",
     )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] == FlowResultType.FORM
     groups = {key.schema for key in result["data_schema"].schema}
-    assert groups == {"cooling", "heating", "safety"}
-
-    await hass.config_entries.async_unload(entry.entry_id)
-    await hass.async_block_till_done()
+    assert groups == {"sensors", "devices", "cooling", "heating", "safety"}
 
 
-async def test_grouped_settings_are_saved_flat(hass: HomeAssistant):
-    """The grouping is presentation. Everything reading these expects them
-    beside the sources, not nested under a heading."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-    from custom_components.room_thermostat.config_flow import default_options
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Living Room",
-        data={"name": "Living Room"},
-        options={**default_options(), CONF_TEMPERATURE_SENSOR: "sensor.t",
-                 CONF_COOLER: "climate.ac"},
-    )
-    entry.add_to_hass(hass)
-
+async def test_the_one_form_saves_sources_and_tuning_together(hass: HomeAssistant):
+    entry = await room(hass, temperature_sensor="sensor.t", cooler="climate.ac")
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "tuning"}
-    )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            "cooling": {
-                "cooling_strategy": "gated",
-                "offset_correction": False,
-                "parked_setpoint": 16.0,
-                "cool_cold_tolerance": 0.5,
-                "cool_hot_tolerance": 0.5,
-                "cool_min_on": 900.0,
-                "cool_min_off": 900.0,
-            },
-            "heating": {
-                "allow_ac_heat": False,
-                "heat_cold_tolerance": 0.3,
-                "heat_hot_tolerance": 0.3,
-                "heat_min_on": 300.0,
-                "heat_min_off": 300.0,
-                "valve_travel": 180.0,
-            },
+            "sensors": {"temperature_sensor": "sensor.better", "humidity_sensor": "sensor.h"},
+            "devices": {"cooler": "climate.ac", "heaters": ["valve.radiator"]},
+            "cooling": {"cooling_strategy": "gated", "offset_correction": False,
+                        "parked_setpoint": 16.0, "cool_cold_tolerance": 0.5,
+                        "cool_hot_tolerance": 0.5, "cool_min_on": 900.0,
+                        "cool_min_off": 900.0},
+            "heating": {"allow_ac_heat": False, "heat_cold_tolerance": 0.3,
+                        "heat_hot_tolerance": 0.3, "heat_min_on": 300.0,
+                        "heat_min_off": 300.0, "valve_travel": 180.0},
             "safety": {"frost_temperature": 5.0},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
+    assert entry.options["temperature_sensor"] == "sensor.better"
+    assert entry.options["heaters"] == ["valve.radiator"]
     assert entry.options["cooling_strategy"] == "gated"
-    assert entry.options["parked_setpoint"] == 16.0
-    assert entry.options["valve_travel"] == 180.0
-    # The sources are untouched by a tuning save.
-    assert entry.options[CONF_TEMPERATURE_SENSOR] == "sensor.t"
-    assert "cooling" not in entry.options
-
+    assert "sensors" not in entry.options
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_the_one_form_still_insists_on_a_temperature_sensor(hass: HomeAssistant):
+    entry = await room(hass, temperature_sensor="sensor.t", cooler="climate.ac")
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "sensors": {},
+            "devices": {"cooler": "climate.ac"},
+            "cooling": {}, "heating": {}, "safety": {},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_TEMPERATURE_SENSOR: "required"}
+
+
+async def test_an_inverted_heater_is_listed_by_its_name(hass: HomeAssistant):
+    """A checklist of raw entity ids cannot be read at a glance."""
+    from custom_components.room_thermostat.const import CONF_INVERTED_HEATERS
+
+    hass.states.async_set(
+        "valve.c0393798c82e_radiator", "closed", {"friendly_name": "Bedroom radiator"}
+    )
+    entry = await room(
+        hass,
+        temperature_sensor="sensor.t",
+        heaters=["valve.c0393798c82e_radiator"],
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    for key, value in result["data_schema"].schema.items():
+        if key.schema != "devices":
+            continue
+        for inner, selector_ in value.schema.schema.items():
+            if inner.schema == CONF_INVERTED_HEATERS:
+                options = selector_.config["options"]
+                assert options == [
+                    {"value": "valve.c0393798c82e_radiator", "label": "Bedroom radiator"}
+                ]
+                return
+    raise AssertionError("no inverted-heaters field was offered")
