@@ -6,7 +6,9 @@
 # between them.
 set -euo pipefail
 
-HOST="${1:-192.168.0.76}"
+# No default: the address of someone's Home Assistant does not belong in a
+# public repository. Pass it, or set ROOM_THERMOSTAT_HOST.
+HOST="${1:-${ROOM_THERMOSTAT_HOST:?pass the Home Assistant host, or set ROOM_THERMOSTAT_HOST}}"
 TARGET="/config/custom_components/room_thermostat"
 
 rsync -a --delete --exclude '__pycache__' \
