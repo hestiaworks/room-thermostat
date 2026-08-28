@@ -607,3 +607,35 @@ def test_the_soonest_hold_is_the_one_to_come_back_for():
         now=1050.0,
     )
     assert decision.retry_after == 50.0
+
+
+def test_a_room_switched_off_is_still_warmed_through_when_blind():
+    """Frost protection overrides off when the room can be measured. The blind
+    duty cycle is what stands in for it when the room cannot be, so excluding
+    off leaves exactly the case the fallback exists for uncovered."""
+    off_long_enough = LoopState(
+        heaters_on=False, heaters_changed_at=0.0, cooler_on=False, cooler_changed_at=0.0
+    )
+    decision = decide(
+        config(warm_on=600.0, warm_off=3000.0),
+        Readings(room_temperature=None, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="off", target=21.0, target_low=None, target_high=None),
+        off_long_enough,
+        now=3000.0,
+    )
+    assert decision.sensor_lost is True
+    assert decision.heaters_on is True
+
+
+def test_the_blind_cycle_still_rests_when_the_room_is_off():
+    on_long_enough = LoopState(
+        heaters_on=True, heaters_changed_at=1000.0, cooler_on=False, cooler_changed_at=0.0
+    )
+    decision = decide(
+        config(warm_on=600.0, warm_off=3000.0),
+        Readings(room_temperature=None, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="off", target=21.0, target_low=None, target_high=None),
+        on_long_enough,
+        now=1700.0,
+    )
+    assert decision.heaters_on is False

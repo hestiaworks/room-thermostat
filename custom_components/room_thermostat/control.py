@@ -265,7 +265,11 @@ def decide(
             cooler_on, cooler, held = _cool(config, readings, high, state, now)
             holds.append(held)
 
-    if sensor_lost and config.has_heater and request.hvac_mode != "off":
+    # Applies whatever the mode is, including off. Frost protection overrides
+    # off when the room can be measured; this stands in for it when the room
+    # cannot be, so excluding off would leave the very case it exists for
+    # uncovered — a room switched off in January with a dead sensor.
+    if sensor_lost and config.has_heater:
         heaters_on = _warm_through(state, now, config)
 
     # Frost protection overrides intent, which is the point of it: a
