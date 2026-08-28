@@ -115,14 +115,19 @@ def _number(hass: HomeAssistant, entity_id: str | None) -> float | None:
 
 
 class RoomThermostat(ClimateEntity, RestoreEntity):
-    _attr_has_entity_name = True
-    _attr_name = None
+    # Named explicitly rather than derived from the device. Letting Home
+    # Assistant compose a device name with an entity name produced
+    # climate.living_room_living_room on one system and climate.bedroom on
+    # another from identical code; this makes the id a function of the room's
+    # name and nothing else.
+    _attr_has_entity_name = False
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self._entry = entry
         self._attr_unique_id = entry.entry_id
+        self._attr_name = entry.title
         chosen = sources(entry)
         self._sensor = chosen.get(CONF_TEMPERATURE_SENSOR)
         self._humidity = chosen.get(CONF_HUMIDITY_SENSOR)

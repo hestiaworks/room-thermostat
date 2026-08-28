@@ -25,12 +25,13 @@ async def async_setup_entry(
 
 
 class HeatDemand(BinarySensorEntity):
-    _attr_has_entity_name = True
-    _attr_name = "Heat demand"
+    # Named explicitly, for the same reason as the thermostat.
+    _attr_has_entity_name = False
 
     def __init__(self, entry: ConfigEntry) -> None:
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_heat_demand"
+        self._attr_name = f"{entry.title} heat demand"
         self._attr_is_on = False
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},

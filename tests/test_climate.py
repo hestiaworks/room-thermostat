@@ -686,3 +686,16 @@ async def test_hiding_nothing_is_the_default(hass: HomeAssistant):
     shown = hass.states.get("climate.bedroom").attributes
     assert shown["fan_modes"] == ["auto"]
     assert shown["preset_modes"] == ["eco"]
+
+
+async def test_a_rooms_entity_ids_are_predictable(hass: HomeAssistant):
+    """Derived ids depend on how Home Assistant composes a device name with an
+    entity name, which produced climate.living_room_living_room on one system
+    and climate.bedroom here from the same code. Naming both explicitly makes
+    the id a function of the room's name and nothing else."""
+    hass.states.async_set("sensor.t", "22.0")
+    await add_room(hass, **{CONF_TEMPERATURE_SENSOR: "sensor.t",
+                            CONF_HEATERS: ["valve.radiator"]})
+    assert hass.states.get("climate.bedroom") is not None
+    assert hass.states.get("binary_sensor.bedroom_heat_demand") is not None
+    assert hass.states.get("climate.bedroom").attributes["friendly_name"] == "Bedroom"
