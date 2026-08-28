@@ -56,22 +56,55 @@
         }
       },
       "tuning": {
-        "title": "How it controls",
-        "data": {
-          "cooling_strategy": "Cooling strategy",
-          "offset_correction": "Correct the unit's setpoint for its sensor error",
-          "allow_ac_heat": "Heat this room with the air conditioner instead of the valves",
-          "parked_setpoint": "Parked setpoint when gating (°C)",
-          "cool_cold_tolerance": "Cool: degrees above target before starting",
-          "cool_hot_tolerance": "Cool: degrees below target before stopping",
-          "cool_min_on": "Cool: minimum run (seconds)",
-          "cool_min_off": "Cool: minimum rest (seconds)",
-          "heat_cold_tolerance": "Heat: degrees below target before starting",
-          "heat_hot_tolerance": "Heat: degrees above target before stopping",
-          "heat_min_on": "Heat: minimum run (seconds)",
-          "heat_min_off": "Heat: minimum rest (seconds)",
-          "valve_travel": "Valve travel time (seconds)",
-          "frost_temperature": "Frost protection temperature (°C)"
+        "title": "How this room controls",
+        "sections": {
+          "cooling": {
+            "name": "Cooling",
+            "description": "How the air conditioner is driven.",
+            "data": {
+              "cooling_strategy": "Cooling strategy",
+              "offset_correction": "Correct the unit's setpoint for its sensor error",
+              "parked_setpoint": "Parked setpoint when gating",
+              "cool_cold_tolerance": "Degrees above target before starting",
+              "cool_hot_tolerance": "Degrees below target before stopping",
+              "cool_min_on": "Minimum run",
+              "cool_min_off": "Minimum rest"
+            },
+            "data_description": {
+              "cooling_strategy": "Pass-through forwards your setpoint and lets the unit regulate itself, which keeps an inverter modulating. Gated parks the unit low and starts and stops it against this room's sensor — use it where the unit sits in cabinetry and satisfies itself against its own cold air.",
+              "offset_correction": "For a unit whose sensor is steadily wrong by a fixed amount. Never enable it for a unit inside cabinetry: there the error grows the longer it runs, and correcting for it feeds on itself.",
+              "parked_setpoint": "Low enough that the unit can never satisfy itself while gated.",
+              "cool_min_on": "How long the compressor must run once started. Protects it from the short cycling that gating would otherwise cause.",
+              "cool_min_off": "How long it must rest before starting again."
+            }
+          },
+          "heating": {
+            "name": "Heating",
+            "description": "How the valves are driven. Radiators settle in minutes; a floor slab keeps releasing heat for an hour, so it wants a wider band and much longer minimums.",
+            "data": {
+              "allow_ac_heat": "Heat this room with the air conditioner instead of the valves",
+              "heat_cold_tolerance": "Degrees below target before starting",
+              "heat_hot_tolerance": "Degrees above target before stopping",
+              "heat_min_on": "Minimum run",
+              "heat_min_off": "Minimum rest",
+              "valve_travel": "Valve travel time"
+            },
+            "data_description": {
+              "allow_ac_heat": "Either or, not both: when this is on the valves stay shut in this room.",
+              "heat_hot_tolerance": "Usually larger than the starting tolerance, because a warm floor overshoots far more than it undershoots.",
+              "valve_travel": "How long a thermal actuator takes to physically open. The room does not report a call for heat until this has elapsed, so a boiler never fires into a circuit that has not opened."
+            }
+          },
+          "safety": {
+            "name": "Safety",
+            "description": "Applies whatever the thermostat is set to, including off.",
+            "data": {
+              "frost_temperature": "Frost protection temperature"
+            },
+            "data_description": {
+              "frost_temperature": "Below this the valves open regardless of mode, and keep heating until the room has recovered a degree past it."
+            }
+          }
         }
       }
     },
@@ -86,6 +119,14 @@
     "sensor_lost": {
       "title": "{room} has lost its temperature sensor",
       "description": "{sensor} is unavailable, so {room} cannot be controlled against a reading. It has fallen back to warming through periodically so it cannot freeze, but it is no longer holding a temperature. Restore the sensor, or reconfigure the room to use a different one."
+    }
+  },
+  "selector": {
+    "cooling_strategy": {
+      "options": {
+        "passthrough": "Pass-through — the unit regulates itself",
+        "gated": "Gated — this room starts and stops the unit"
+      }
     }
   }
 }

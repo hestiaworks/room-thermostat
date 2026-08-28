@@ -471,3 +471,88 @@ async def test_inversion_is_not_offered_before_there_are_heaters(hass: HomeAssis
 
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_the_tuning_form_is_grouped_rather_than_one_long_list(
+    hass: HomeAssistant,
+):
+    """Eleven bare numbers in one column tells you nothing about which belong
+    together or what they do."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.room_thermostat.config_flow import default_options
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Living Room",
+        data={"name": "Living Room"},
+        options={**default_options(), CONF_TEMPERATURE_SENSOR: "sensor.t",
+                 CONF_COOLER: "climate.ac"},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "tuning"}
+    )
+    groups = {key.schema for key in result["data_schema"].schema}
+    assert groups == {"cooling", "heating", "safety"}
+
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_grouped_settings_are_saved_flat(hass: HomeAssistant):
+    """The grouping is presentation. Everything reading these expects them
+    beside the sources, not nested under a heading."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.room_thermostat.config_flow import default_options
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Living Room",
+        data={"name": "Living Room"},
+        options={**default_options(), CONF_TEMPERATURE_SENSOR: "sensor.t",
+                 CONF_COOLER: "climate.ac"},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "tuning"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "cooling": {
+                "cooling_strategy": "gated",
+                "offset_correction": False,
+                "parked_setpoint": 16.0,
+                "cool_cold_tolerance": 0.5,
+                "cool_hot_tolerance": 0.5,
+                "cool_min_on": 900.0,
+                "cool_min_off": 900.0,
+            },
+            "heating": {
+                "allow_ac_heat": False,
+                "heat_cold_tolerance": 0.3,
+                "heat_hot_tolerance": 0.3,
+                "heat_min_on": 300.0,
+                "heat_min_off": 300.0,
+                "valve_travel": 180.0,
+            },
+            "safety": {"frost_temperature": 5.0},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert entry.options["cooling_strategy"] == "gated"
+    assert entry.options["parked_setpoint"] == 16.0
+    assert entry.options["valve_travel"] == 180.0
+    # The sources are untouched by a tuning save.
+    assert entry.options[CONF_TEMPERATURE_SENSOR] == "sensor.t"
+    assert "cooling" not in entry.options
+
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

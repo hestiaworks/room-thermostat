@@ -11,7 +11,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.data_entry_flow import FlowResult, section
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, selector
 
@@ -118,6 +118,102 @@ ROOM_SCHEMA = vol.Schema(
 )
 
 DEVICES_SCHEMA = vol.Schema(DEVICE_FIELDS)
+
+
+def _degrees(minimum: float, maximum: float, step: float = 0.1) -> Any:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=minimum, max=maximum, step=step,
+            unit_of_measurement="°C", mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+
+def _seconds(maximum: float = 7200) -> Any:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=0, max=maximum, step=10,
+            unit_of_measurement="seconds", mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+
+def _group(fields: dict[Any, Any], collapsed: bool) -> Any:
+    return section(vol.Schema(fields), {"collapsed": collapsed})
+
+
+def tuning_schema(current: dict[str, Any]) -> vol.Schema:
+    """The control settings, grouped by the device they are about."""
+    return vol.Schema(
+        {
+            vol.Required("cooling"): _group(
+                {
+                    vol.Required(
+                        CONF_COOLING_STRATEGY, default=current[CONF_COOLING_STRATEGY]
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[STRATEGY_PASSTHROUGH, STRATEGY_GATED],
+                            translation_key="cooling_strategy",
+                        )
+                    ),
+                    vol.Required(
+                        CONF_OFFSET_CORRECTION, default=current[CONF_OFFSET_CORRECTION]
+                    ): selector.BooleanSelector(),
+                    vol.Required(
+                        CONF_PARKED_SETPOINT, default=current[CONF_PARKED_SETPOINT]
+                    ): _degrees(5, 30, 0.5),
+                    vol.Required(
+                        CONF_COOL_COLD_TOLERANCE,
+                        default=current[CONF_COOL_COLD_TOLERANCE],
+                    ): _degrees(0.1, 5),
+                    vol.Required(
+                        CONF_COOL_HOT_TOLERANCE,
+                        default=current[CONF_COOL_HOT_TOLERANCE],
+                    ): _degrees(0.1, 5),
+                    vol.Required(
+                        CONF_COOL_MIN_ON, default=current[CONF_COOL_MIN_ON]
+                    ): _seconds(),
+                    vol.Required(
+                        CONF_COOL_MIN_OFF, default=current[CONF_COOL_MIN_OFF]
+                    ): _seconds(),
+                },
+                collapsed=False,
+            ),
+            vol.Required("heating"): _group(
+                {
+                    vol.Required(
+                        CONF_ALLOW_AC_HEAT, default=current[CONF_ALLOW_AC_HEAT]
+                    ): selector.BooleanSelector(),
+                    vol.Required(
+                        CONF_HEAT_COLD_TOLERANCE,
+                        default=current[CONF_HEAT_COLD_TOLERANCE],
+                    ): _degrees(0.1, 5),
+                    vol.Required(
+                        CONF_HEAT_HOT_TOLERANCE,
+                        default=current[CONF_HEAT_HOT_TOLERANCE],
+                    ): _degrees(0.1, 5),
+                    vol.Required(
+                        CONF_HEAT_MIN_ON, default=current[CONF_HEAT_MIN_ON]
+                    ): _seconds(),
+                    vol.Required(
+                        CONF_HEAT_MIN_OFF, default=current[CONF_HEAT_MIN_OFF]
+                    ): _seconds(),
+                    vol.Required(
+                        CONF_VALVE_TRAVEL, default=current[CONF_VALVE_TRAVEL]
+                    ): _seconds(900),
+                },
+                collapsed=True,
+            ),
+            vol.Required("safety"): _group(
+                {
+                    vol.Required(
+                        CONF_FROST_TEMPERATURE, default=current[CONF_FROST_TEMPERATURE]
+                    ): _degrees(2, 15, 0.5),
+                },
+                collapsed=True,
+            ),
+        }
+    )
 
 
 def default_options() -> dict[str, Any]:
@@ -279,39 +375,23 @@ class RoomThermostatOptionsFlow(OptionsFlow):
     async def async_step_tuning(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
+        """How the room controls, grouped by which device it is about.
+
+        Eleven bare numbers in one column said nothing about which belonged
+        together. The grouping is presentation only: everything that reads
+        these expects them flat, beside the sources.
+        """
         if user_input is not None:
+            flattened = {
+                key: value
+                for group in user_input.values()
+                for key, value in group.items()
+            }
             return self.async_create_entry(
-                data={**self.config_entry.options, **user_input}
+                data={**self.config_entry.options, **flattened}
             )
+
         current = {**default_options(), **self.config_entry.options}
-        numbers = (
-            CONF_PARKED_SETPOINT,
-            CONF_COOL_COLD_TOLERANCE,
-            CONF_COOL_HOT_TOLERANCE,
-            CONF_COOL_MIN_ON,
-            CONF_COOL_MIN_OFF,
-            CONF_HEAT_COLD_TOLERANCE,
-            CONF_HEAT_HOT_TOLERANCE,
-            CONF_HEAT_MIN_ON,
-            CONF_HEAT_MIN_OFF,
-            CONF_VALVE_TRAVEL,
-            CONF_FROST_TEMPERATURE,
+        return self.async_show_form(
+            step_id="tuning", data_schema=tuning_schema(current)
         )
-        schema: dict[Any, Any] = {
-            vol.Required(
-                CONF_COOLING_STRATEGY, default=current[CONF_COOLING_STRATEGY]
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[STRATEGY_PASSTHROUGH, STRATEGY_GATED]
-                )
-            ),
-            vol.Required(
-                CONF_OFFSET_CORRECTION, default=current[CONF_OFFSET_CORRECTION]
-            ): selector.BooleanSelector(),
-            vol.Required(
-                CONF_ALLOW_AC_HEAT, default=current[CONF_ALLOW_AC_HEAT]
-            ): selector.BooleanSelector(),
-        }
-        for key in numbers:
-            schema[vol.Required(key, default=current[key])] = vol.Coerce(float)
-        return self.async_show_form(step_id="tuning", data_schema=vol.Schema(schema))
