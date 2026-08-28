@@ -54,11 +54,13 @@
             "data": {
               "cooler": "Air conditioner",
               "heaters": "Heating valves",
-              "inverted_heaters": "Wired the other way round"
+              "inverted_heaters": "Wired the other way round",
+              "visible_controls": "Air conditioner controls to show"
             },
             "data_description": {
               "heaters": "Radiator valves are valve entities; a floor loop driven by a relay is a switch.",
-              "inverted_heaters": "Normally-open actuators, energised to stop heat rather than to pass it. Tick any valve that behaves backwards."
+              "inverted_heaters": "Normally-open actuators, energised to stop heat rather than to pass it. Tick any valve that behaves backwards.",
+              "visible_controls": "Untick anything this unit reports but you never use, or does not really have. Hidden controls disappear from every card and panel that draws this room."
             }
           },
           "cooling": {
@@ -129,6 +131,14 @@
       "options": {
         "passthrough": "Pass-through — the unit regulates itself",
         "gated": "Gated — this room starts and stops the unit"
+      }
+    },
+    "visible_controls": {
+      "options": {
+        "fan_mode": "Fan speed",
+        "swing_mode": "Swing",
+        "swing_horizontal_mode": "Horizontal swing",
+        "preset_mode": "Presets"
       }
     }
   }

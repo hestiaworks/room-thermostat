@@ -621,3 +621,68 @@ async def test_a_change_held_by_a_minimum_time_applies_itself_later(
 
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_controls_can_be_hidden_from_the_thermostat(hass: HomeAssistant):
+    """A unit may report a capability its owner never uses, or does not really
+    have. Showing it clutters every card and panel that draws this room."""
+    from homeassistant.components.climate import ClimateEntityFeature
+
+    hass.states.async_set("sensor.bedroom_temperature", "22.0")
+    hass.states.async_set(
+        "climate.bedroom_ac",
+        "off",
+        {
+            "fan_modes": ["auto", "high"],
+            "swing_modes": ["default", "full_swing"],
+            "swing_horizontal_modes": ["default", "left"],
+            "preset_modes": ["eco", "none"],
+        },
+    )
+    entry = await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+        },
+    )
+    everything = hass.states.get("climate.bedroom").attributes
+    assert everything["swing_horizontal_modes"] == ["default", "left"]
+    assert everything["preset_modes"] == ["eco", "none"]
+
+    hass.config_entries.async_update_entry(
+        entry,
+        options={**entry.options, "visible_controls": ["fan_mode", "swing_mode"]},
+    )
+    await hass.async_block_till_done()
+
+    trimmed = hass.states.get("climate.bedroom")
+    assert trimmed.attributes.get("swing_horizontal_modes") is None
+    assert trimmed.attributes.get("preset_modes") is None
+    assert trimmed.attributes["fan_modes"] == ["auto", "high"]
+
+    features = ClimateEntityFeature(trimmed.attributes["supported_features"])
+    assert ClimateEntityFeature.SWING_HORIZONTAL_MODE not in features
+    assert ClimateEntityFeature.PRESET_MODE not in features
+    assert ClimateEntityFeature.FAN_MODE in features
+
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_hiding_nothing_is_the_default(hass: HomeAssistant):
+    hass.states.async_set("sensor.bedroom_temperature", "22.0")
+    hass.states.async_set(
+        "climate.bedroom_ac", "off",
+        {"fan_modes": ["auto"], "preset_modes": ["eco"]},
+    )
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_COOLER: "climate.bedroom_ac",
+        },
+    )
+    shown = hass.states.get("climate.bedroom").attributes
+    assert shown["fan_modes"] == ["auto"]
+    assert shown["preset_modes"] == ["eco"]

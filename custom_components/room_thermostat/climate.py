@@ -49,6 +49,8 @@ from .const import (
     CONF_HEAT_MIN_ON,
     CONF_HEATERS,
     CONF_INVERTED_HEATERS,
+    CONF_VISIBLE_CONTROLS,
+    CONTROLS,
     CONF_HUMIDITY_SENSOR,
     CONF_OFFSET_CORRECTION,
     CONF_PARKED_SETPOINT,
@@ -175,15 +177,25 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         )
         if self._heaters and self._cooler:
             features |= ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
-        for attribute, flag in (
-            ("fan_modes", ClimateEntityFeature.FAN_MODE),
-            ("swing_modes", ClimateEntityFeature.SWING_MODE),
-            ("swing_horizontal_modes", ClimateEntityFeature.SWING_HORIZONTAL_MODE),
-            ("preset_modes", ClimateEntityFeature.PRESET_MODE),
+        for control, attribute, flag in (
+            ("fan_mode", "fan_modes", ClimateEntityFeature.FAN_MODE),
+            ("swing_mode", "swing_modes", ClimateEntityFeature.SWING_MODE),
+            ("swing_horizontal_mode", "swing_horizontal_modes",
+             ClimateEntityFeature.SWING_HORIZONTAL_MODE),
+            ("preset_mode", "preset_modes", ClimateEntityFeature.PRESET_MODE),
         ):
-            if self._cooler_attribute(attribute):
+            if self._shows(control) and self._cooler_attribute(attribute):
                 features |= flag
         return features
+
+    def _shows(self, control: str) -> bool:
+        """Whether this room offers one of the unit's controls.
+
+        Absent means show everything the unit reports, which is what a room
+        configured before this existed expects.
+        """
+        chosen = self._options.get(CONF_VISIBLE_CONTROLS)
+        return control in chosen if chosen is not None else True
 
     def _cooler_attribute(self, name: str) -> Any:
         """Whatever the unit says about itself, republished unchanged."""
@@ -194,35 +206,35 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
 
     @property
     def fan_modes(self):
-        return self._cooler_attribute("fan_modes")
+        return self._cooler_attribute("fan_modes") if self._shows("fan_mode") else None
 
     @property
     def fan_mode(self):
-        return self._cooler_attribute("fan_mode")
+        return self._cooler_attribute("fan_mode") if self._shows("fan_mode") else None
 
     @property
     def swing_modes(self):
-        return self._cooler_attribute("swing_modes")
+        return self._cooler_attribute("swing_modes") if self._shows("swing_mode") else None
 
     @property
     def swing_mode(self):
-        return self._cooler_attribute("swing_mode")
+        return self._cooler_attribute("swing_mode") if self._shows("swing_mode") else None
 
     @property
     def swing_horizontal_modes(self):
-        return self._cooler_attribute("swing_horizontal_modes")
+        return self._cooler_attribute("swing_horizontal_modes") if self._shows("swing_horizontal_mode") else None
 
     @property
     def swing_horizontal_mode(self):
-        return self._cooler_attribute("swing_horizontal_mode")
+        return self._cooler_attribute("swing_horizontal_mode") if self._shows("swing_horizontal_mode") else None
 
     @property
     def preset_modes(self):
-        return self._cooler_attribute("preset_modes")
+        return self._cooler_attribute("preset_modes") if self._shows("preset_mode") else None
 
     @property
     def preset_mode(self):
-        return self._cooler_attribute("preset_mode")
+        return self._cooler_attribute("preset_mode") if self._shows("preset_mode") else None
 
     # --- what the room is doing ------------------------------------------
 

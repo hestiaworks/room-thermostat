@@ -19,8 +19,13 @@ CONF_HEAT_HOT_TOLERANCE = "heat_hot_tolerance"
 CONF_HEAT_MIN_ON = "heat_min_on"
 CONF_HEAT_MIN_OFF = "heat_min_off"
 CONF_INVERTED_HEATERS = "inverted_heaters"
+CONF_VISIBLE_CONTROLS = "visible_controls"
 CONF_ALLOW_AC_HEAT = "allow_ac_heat"
 CONF_FROST_TEMPERATURE = "frost_temperature"
+
+# The air conditioner controls a room may show. A unit can report a capability
+# its owner never uses, or does not really have.
+CONTROLS = ("fan_mode", "swing_mode", "swing_horizontal_mode", "preset_mode")
 
 STRATEGY_PASSTHROUGH = "passthrough"
 STRATEGY_GATED = "gated"

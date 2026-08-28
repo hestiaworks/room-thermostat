@@ -30,6 +30,8 @@ from .const import (
     CONF_HEAT_MIN_ON,
     CONF_HEATERS,
     CONF_INVERTED_HEATERS,
+    CONF_VISIBLE_CONTROLS,
+    CONTROLS,
     CONF_HUMIDITY_SENSOR,
     CONF_OFFSET_CORRECTION,
     CONF_PARKED_SETPOINT,
@@ -174,6 +176,17 @@ def room_schema(
                     vol.Optional(CONF_COOLER): COOLER_SELECTOR,
                     vol.Optional(CONF_HEATERS): HEATERS_SELECTOR,
                     **inverted_field(hass, chosen.get(CONF_HEATERS) or []),
+                    vol.Optional(
+                        CONF_VISIBLE_CONTROLS,
+                        default=list(current.get(CONF_VISIBLE_CONTROLS) or CONTROLS),
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=list(CONTROLS),
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.LIST,
+                            translation_key="visible_controls",
+                        )
+                    ),
                 },
                 collapsed=False,
             ),
