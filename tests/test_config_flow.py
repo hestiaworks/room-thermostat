@@ -1,3 +1,5 @@
+from typing import Any
+
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
@@ -374,6 +376,23 @@ async def test_an_inverted_heater_is_listed_by_its_name(hass: HomeAssistant):
     raise AssertionError("no inverted-heaters field was offered")
 
 
+def suggested_value(schema: Any, section: str, field: str) -> Any:
+    """What the form will show in a field, whichever way Home Assistant says it.
+
+    Older versions carry a section's suggestions as one dictionary on the
+    section itself; newer ones descend and mark each field. Asserting on
+    either alone makes the test a statement about the Home Assistant release
+    it happened to run against.
+    """
+    key = next(k for k in schema.schema if str(k) == section)
+    carried = (key.description or {}).get("suggested_value")
+    if isinstance(carried, dict):
+        return carried.get(field)
+    inner = schema.schema[key].schema.schema
+    marker = next(k for k in inner if str(k) == field)
+    return (marker.description or {}).get("suggested_value")
+
+
 async def test_removing_the_last_valve_keeps_its_inversion_from_blocking_it(
     hass: HomeAssistant,
 ):
@@ -431,9 +450,6 @@ async def test_a_refused_form_comes_back_with_what_was_typed(hass: HomeAssistant
         },
     )
     assert result["type"] == FlowResultType.FORM
-    # Suggestions for a section are carried on the section itself: Home
-    # Assistant does not descend into one.
-    devices = next(key for key in result["data_schema"].schema if str(key) == "devices")
-    assert devices.description["suggested_value"]["heaters"] == ["valve.other"]
+    assert suggested_value(result["data_schema"], "devices", "heaters") == ["valve.other"]
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
