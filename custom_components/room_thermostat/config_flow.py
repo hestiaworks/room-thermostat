@@ -318,9 +318,6 @@ def _problems(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str, str]
         # A room driving one of these would drive itself, and the loop is not
         # visible from the interface.
         return {CONF_COOLER: "own_entity"}
-    inverted = set(user_input.get(CONF_INVERTED_HEATERS) or [])
-    if not inverted <= set(user_input.get(CONF_HEATERS) or []):
-        return {CONF_INVERTED_HEATERS: "not_a_heater"}
     if not cooler and not user_input.get(CONF_HEATERS):
         # A room that can neither heat nor cool is a thermometer.
         return {"base": "no_devices"}
@@ -386,6 +383,7 @@ class RoomThermostatOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         errors: dict[str, str] = {}
+        flat: dict[str, Any] | None = None
         if user_input is not None:
             flat = {
                 key: value
@@ -396,15 +394,27 @@ class RoomThermostatOptionsFlow(OptionsFlow):
             # clearing a device clears it rather than falling back to what the
             # room used before.
             flat.update({key: flat.get(key) for key in SOURCE_KEYS})
+            # The inversion ticks list the room's own heaters, so a tick for a
+            # heater that has just been removed is the removal seen from the
+            # other side, not a mistake to report. It goes with the heater.
+            flat[CONF_INVERTED_HEATERS] = [
+                heater
+                for heater in (flat.get(CONF_INVERTED_HEATERS) or [])
+                if heater in (flat.get(CONF_HEATERS) or [])
+            ]
             errors = _problems(self.hass, flat)
             if not errors:
                 return self.async_create_entry(
                     data={**self.config_entry.options, **flat}
                 )
 
-        chosen = sources(self.config_entry)
+        # A refused form comes back as it was filled in. Redrawing it from the
+        # stored configuration threw the edit away, and the field someone had
+        # just cleared reappeared with its old value — which reads as the form
+        # ignoring them rather than as a refusal.
+        chosen = {key: flat[key] for key in SOURCE_KEYS} if flat else sources(self.config_entry)
         current = {**default_options(), **self.config_entry.options}
-        suggested = {
+        suggested = user_input if user_input is not None else {
             "sensors": {k: v for k, v in chosen.items() if v and "sensor" in k},
             "devices": {
                 k: v

@@ -372,3 +372,68 @@ async def test_an_inverted_heater_is_listed_by_its_name(hass: HomeAssistant):
                 ]
                 return
     raise AssertionError("no inverted-heaters field was offered")
+
+
+async def test_removing_the_last_valve_keeps_its_inversion_from_blocking_it(
+    hass: HomeAssistant,
+):
+    """Clearing the valves clears what was said about them.
+
+    The inversion tick lists the room's own heaters, so a tick left behind
+    for a heater that has just been removed is not a mistake anyone can act
+    on — it is the removal itself, seen from the other side. Refusing the
+    form for it left the valve field snapping back to what it was, with the
+    complaint attached to a checkbox nobody had touched.
+    """
+    entry = await room(
+        hass,
+        temperature_sensor="sensor.t",
+        cooler="climate.ac",
+        heaters=["switch.panel"],
+        inverted_heaters=["switch.panel"],
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "sensors": {"temperature_sensor": "sensor.t"},
+            "devices": {"cooler": "climate.ac", "inverted_heaters": ["switch.panel"]},
+            "cooling": {}, "heating": {}, "safety": {},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert entry.options["heaters"] is None
+    assert not entry.options["inverted_heaters"]
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_a_refused_form_comes_back_with_what_was_typed(hass: HomeAssistant):
+    """A rejected form keeps the edit, rather than the stored configuration.
+
+    It was redrawn from what the room already had, so every change made
+    before the mistake was discarded — and the field the person had just
+    cleared reappeared with its old value, which reads as the form ignoring
+    them rather than as a refusal.
+    """
+    entry = await room(
+        hass, temperature_sensor="sensor.t", cooler="climate.ac", heaters=["valve.rad"],
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            # No temperature sensor: refused, and everything else must survive.
+            "sensors": {},
+            "devices": {"cooler": "climate.ac", "heaters": ["valve.other"]},
+            "cooling": {}, "heating": {}, "safety": {},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    # Suggestions for a section are carried on the section itself: Home
+    # Assistant does not descend into one.
+    devices = next(key for key in result["data_schema"].schema if str(key) == "devices")
+    assert devices.description["suggested_value"]["heaters"] == ["valve.other"]
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
