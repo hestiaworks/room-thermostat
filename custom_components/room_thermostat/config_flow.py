@@ -17,6 +17,16 @@ from homeassistant.helpers import entity_registry as er, selector
 
 from .const import (
     CONF_ALLOW_AC_HEAT,
+    CONF_COOL_LIMIT,
+    CONF_COOL_LIMIT_HYSTERESIS,
+    CONF_COOL_OVERRIDE,
+    CONF_DAMPING_HOURS,
+    CONF_ENTRY_TYPE,
+    CONF_HEAT_LIMIT,
+    CONF_HEAT_LIMIT_HYSTERESIS,
+    CONF_HEAT_OVERRIDE,
+    CONF_OUTDOOR_SENSOR,
+    CONF_SEASON_DWELL,
     CONF_COOL_COLD_TOLERANCE,
     CONF_COOL_HOT_TOLERANCE,
     CONF_COOL_MIN_OFF,
@@ -37,16 +47,23 @@ from .const import (
     CONF_PARKED_SETPOINT,
     CONF_TEMPERATURE_SENSOR,
     CONF_VALVE_TRAVEL,
+    DEFAULT_COOL_LIMIT,
     DEFAULT_COOL_MIN_OFF,
+    DEFAULT_DAMPING_HOURS,
     DEFAULT_COOL_MIN_ON,
     DEFAULT_COOL_TOLERANCE,
     DEFAULT_FROST_TEMPERATURE,
+    DEFAULT_HEAT_LIMIT,
     DEFAULT_HEAT_MIN_OFF,
     DEFAULT_HEAT_MIN_ON,
     DEFAULT_HEAT_TOLERANCE,
+    DEFAULT_LIMIT_HYSTERESIS,
     DEFAULT_PARKED_SETPOINT,
+    DEFAULT_SEASON_DWELL_HOURS,
+    DEFAULT_SEASON_OVERRIDE,
     DEFAULT_VALVE_TRAVEL,
     DOMAIN,
+    ENTRY_SEASONS,
     STRATEGY_GATED,
     STRATEGY_PASSTHROUGH,
 )
@@ -279,6 +296,86 @@ def default_options() -> dict[str, Any]:
     }
 
 
+OUTDOOR_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(
+        # A weather entity is as good as a sensor for an average measured in
+        # days, and an input_number is how the behaviour gets exercised without
+        # waiting for a season.
+        filter=[
+            selector.EntityFilterSelectorConfig(
+                domain="sensor", device_class="temperature"
+            ),
+            selector.EntityFilterSelectorConfig(
+                domain=["weather", "input_number", "number"]
+            ),
+        ]
+    )
+)
+
+
+def season_options() -> dict[str, Any]:
+    """What the Seasons entry holds when the integration creates it.
+
+    No outdoor source, so it gates nothing until someone chooses one. An
+    existing house gains a row and no behaviour change at all.
+    """
+    return {
+        CONF_OUTDOOR_SENSOR: None,
+        CONF_DAMPING_HOURS: DEFAULT_DAMPING_HOURS,
+        CONF_SEASON_DWELL: DEFAULT_SEASON_DWELL_HOURS,
+        CONF_HEAT_LIMIT: DEFAULT_HEAT_LIMIT,
+        CONF_HEAT_LIMIT_HYSTERESIS: DEFAULT_LIMIT_HYSTERESIS,
+        CONF_COOL_LIMIT: DEFAULT_COOL_LIMIT,
+        CONF_COOL_LIMIT_HYSTERESIS: DEFAULT_LIMIT_HYSTERESIS,
+        CONF_HEAT_OVERRIDE: DEFAULT_SEASON_OVERRIDE,
+        CONF_COOL_OVERRIDE: DEFAULT_SEASON_OVERRIDE,
+    }
+
+
+def _hours(maximum: float) -> Any:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=0, max=maximum, step=1,
+            unit_of_measurement="hours", mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+
+def seasons_schema(current: dict[str, Any]) -> vol.Schema:
+    """Everything the house decides once, on one form."""
+    return vol.Schema(
+        {
+            vol.Optional(CONF_OUTDOOR_SENSOR): OUTDOOR_SELECTOR,
+            vol.Required(
+                CONF_DAMPING_HOURS, default=current[CONF_DAMPING_HOURS]
+            ): _hours(48),
+            vol.Required(
+                CONF_SEASON_DWELL, default=current[CONF_SEASON_DWELL]
+            ): _hours(72),
+            vol.Required(
+                CONF_HEAT_LIMIT, default=current[CONF_HEAT_LIMIT]
+            ): _degrees(0, 30),
+            vol.Required(
+                CONF_HEAT_LIMIT_HYSTERESIS,
+                default=current[CONF_HEAT_LIMIT_HYSTERESIS],
+            ): _degrees(0, 5),
+            vol.Required(
+                CONF_COOL_LIMIT, default=current[CONF_COOL_LIMIT]
+            ): _degrees(0, 30),
+            vol.Required(
+                CONF_COOL_LIMIT_HYSTERESIS,
+                default=current[CONF_COOL_LIMIT_HYSTERESIS],
+            ): _degrees(0, 5),
+            vol.Required(
+                CONF_HEAT_OVERRIDE, default=current[CONF_HEAT_OVERRIDE]
+            ): _degrees(0, 15),
+            vol.Required(
+                CONF_COOL_OVERRIDE, default=current[CONF_COOL_OVERRIDE]
+            ): _degrees(0, 15),
+        }
+    )
+
+
 SOURCE_KEYS = (
     CONF_TEMPERATURE_SENSOR,
     CONF_HUMIDITY_SENSOR,
@@ -346,6 +443,25 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=ROOM_SCHEMA, errors=errors
         )
 
+    async def async_step_import(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Create the one Seasons entry.
+
+        Reachable only from code. A house-level setting offered next to a
+        per-room one invites the reading that you make one per room, and a
+        singleton guarded only by an abort still advertises itself as something
+        to create. A row that cannot be created cannot be created twice.
+        """
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_SEASONS:
+                return self.async_abort(reason="single_instance_allowed")
+        return self.async_create_entry(
+            title="Seasons",
+            data={CONF_ENTRY_TYPE: ENTRY_SEASONS},
+            options=season_options(),
+        )
+
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -375,6 +491,8 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(entry: ConfigEntry) -> OptionsFlow:
+        if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_SEASONS:
+            return SeasonsOptionsFlow()
         return RoomThermostatOptionsFlow()
 
 
@@ -428,4 +546,37 @@ class RoomThermostatOptionsFlow(OptionsFlow):
                 room_schema(self.hass, current, chosen), suggested
             ),
             errors=errors,
+        )
+
+
+class SeasonsOptionsFlow(OptionsFlow):
+    """The house's own settings. There is exactly one of these."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        # Its own step id, not the room form's: they would otherwise share a
+        # title, and this form is not about a room.
+        return await self.async_step_seasons(user_input)
+
+    async def async_step_seasons(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        if user_input is not None:
+            # The source is written even when it is absent, so clearing it
+            # clears it rather than falling back to the previous choice —
+            # clearing the source is how seasons are switched off.
+            return self.async_create_entry(
+                data={
+                    **season_options(),
+                    **user_input,
+                    CONF_OUTDOOR_SENSOR: user_input.get(CONF_OUTDOOR_SENSOR),
+                }
+            )
+        current = {**season_options(), **self.config_entry.options}
+        return self.async_show_form(
+            step_id="seasons",
+            data_schema=self.add_suggested_values_to_schema(
+                seasons_schema(current), current
+            ),
         )
