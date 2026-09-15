@@ -118,6 +118,20 @@ class RoomConfig:
     frost_recovery: float
     warm_on: float
     warm_off: float
+    # Whether the house is in each season. False does not mean "never": the
+    # overrides below are the room's own thermometer disagreeing with a guess
+    # about the weather, and the thermometer wins.
+    #
+    # Both default to allowed, so a room built by something that has never
+    # heard of seasons is in both of them. Failing open is the rule everywhere
+    # in this feature, and a default is the cheapest place to enforce it.
+    heating_allowed: bool = True
+    cooling_allowed: bool = True
+    # How far from setpoint a room must be, out of season, before it runs
+    # anyway. Well below the setpoint on purpose: a threshold near it would
+    # fire on the very evenings the lockout exists to suppress.
+    heat_override: float = 4.0
+    cool_override: float = 4.0
 
 
 @dataclass(frozen=True)
@@ -209,6 +223,25 @@ def _wants_cool(
     return room >= target + config.cool_cold_tolerance
 
 
+def _heat_permitted(config: RoomConfig, room: float, target: float) -> bool:
+    """Whether heating may run at all, before asking whether it is wanted.
+
+    Out of season the room's own thermometer can still overrule the weather,
+    and there is deliberately no recovery band on top: a room held at the
+    override floor cycles no faster than heat_min_on and heat_min_off allow,
+    which is what those exist for.
+    """
+    if config.heating_allowed:
+        return True
+    return room <= target - config.heat_override
+
+
+def _cool_permitted(config: RoomConfig, room: float, target: float) -> bool:
+    if config.cooling_allowed:
+        return True
+    return room >= target + config.cool_override
+
+
 def _corrected_target(target: float, readings: Readings, config: RoomConfig) -> float:
     """Aim the unit at the room rather than at its own sensor."""
     if not config.offset_correction or readings.cooler_temperature is None:
@@ -284,7 +317,9 @@ def decide(
 
     elif mode == "heat" and room is not None:
         target = request.target if request.target is not None else 21.0
-        wants = _wants_heat(room, target, state.heaters_on, config)
+        wants = _wants_heat(room, target, state.heaters_on, config) and _heat_permitted(
+            config, room, target
+        )
         if config.has_cooler and config.allow_ac_heat:
             # Either/or: the unit heats this room, so the valves stay shut.
             cooler_on, held = _switch(
@@ -314,15 +349,20 @@ def decide(
 
     elif mode == "cool" and config.has_cooler and room is not None:
         target = request.target if request.target is not None else 24.0
-        cooler_on, cooler, held = _cool(config, readings, target, state, now)
-        holds.append(held)
+        if _cool_permitted(config, room, target):
+            cooler_on, cooler, held = _cool(config, readings, target, state, now)
+            holds.append(held)
 
     elif mode == "heat_cool" and room is not None:
         low = request.target_low if request.target_low is not None else 20.0
         high = request.target_high if request.target_high is not None else 25.0
         # Below the low setpoint we heat, above the high one we cool, and
         # between them neither runs — so the two can never oppose each other.
-        if config.has_heater and _wants_heat(room, low, state.heaters_on, config):
+        if (
+            config.has_heater
+            and _wants_heat(room, low, state.heaters_on, config)
+            and _heat_permitted(config, room, low)
+        ):
             heaters_on, held = _switch(
                 True,
                 state.heaters_on,
@@ -332,7 +372,11 @@ def decide(
                 config.heat_min_off,
             )
             holds.append(held)
-        elif config.has_cooler and _wants_cool(room, high, state.cooler_on, config):
+        elif (
+            config.has_cooler
+            and _wants_cool(room, high, state.cooler_on, config)
+            and _cool_permitted(config, room, high)
+        ):
             cooler_on, cooler, held = _cool(config, readings, high, state, now)
             holds.append(held)
 
@@ -340,7 +384,10 @@ def decide(
     # off when the room can be measured; this stands in for it when the room
     # cannot be, so excluding off would leave the very case it exists for
     # uncovered — a room switched off in January with a dead sensor.
-    if sensor_lost and config.has_heater:
+    # The blind duty cycle is a frost proxy, so it follows the heating season.
+    # With no reading the override cannot rescue it either, which is the honest
+    # consequence of having no thermometer.
+    if sensor_lost and config.has_heater and config.heating_allowed:
         heaters_on = _warm_through(state, now, config)
 
     # Frost protection overrides intent, which is the point of it: a

@@ -33,6 +33,10 @@ def config(**overrides) -> RoomConfig:
         allow_ac_heat=False,
         frost_temperature=5.0,
         frost_recovery=1.0,
+        heating_allowed=True,
+        cooling_allowed=True,
+        heat_override=4.0,
+        cool_override=4.0,
         warm_on=600.0,
         warm_off=3000.0,
     )
@@ -778,3 +782,144 @@ def test_a_cold_spell_enters_heating_season_once_it_has_lasted_the_dwell():
     assert answer is True
     # Roughly the dwell after the average crossed, and well inside a day.
     assert 6.0 < became < 12.0
+
+
+# --- a season vetoing a call for heat or cool ----------------------------
+
+
+def test_out_of_season_a_cool_room_is_not_heated():
+    """22 set, 20 actual, September. The case the feature exists for."""
+    decision = decide(
+        config(heating_allowed=False),
+        Readings(room_temperature=20.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=10_000.0,
+    )
+    assert decision.heaters_on is False
+    assert decision.hvac_action == "idle"
+
+
+def test_out_of_season_a_cold_room_heats_anyway():
+    """Four degrees under is the override: the weather guess was wrong."""
+    decision = decide(
+        config(heating_allowed=False),
+        Readings(room_temperature=17.9, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=10_000.0,
+    )
+    assert decision.heaters_on is True
+    assert decision.hvac_action == "heating"
+
+
+def test_in_season_nothing_changes():
+    decision = decide(
+        config(heating_allowed=True),
+        Readings(room_temperature=20.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=10_000.0,
+    )
+    assert decision.heaters_on is True
+
+
+def test_frost_protection_ignores_the_season():
+    """A pipe does not care what the outdoor average says."""
+    decision = decide(
+        config(heating_allowed=False),
+        Readings(room_temperature=4.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="off", target=22.0, target_low=None, target_high=None),
+        idle(),
+        now=10_000.0,
+    )
+    assert decision.frost_active is True
+    assert decision.heaters_on is True
+
+
+def test_a_lost_sensor_does_not_warm_through_out_of_season():
+    """The blind duty cycle is a frost proxy. Ten minutes of heat an hour in
+    July because a sensor died is wrong, and with no reading the override
+    cannot rescue it."""
+    decision = decide(
+        config(heating_allowed=False),
+        Readings(room_temperature=None, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=22.0, target_low=None, target_high=None),
+        idle(now=0.0),
+        now=10_000.0,
+    )
+    assert decision.sensor_lost is True
+    assert decision.heaters_on is False
+
+
+def test_a_lost_sensor_still_warms_through_in_season():
+    decision = decide(
+        config(heating_allowed=True),
+        Readings(room_temperature=None, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat", target=22.0, target_low=None, target_high=None),
+        idle(now=0.0),
+        now=10_000.0,
+    )
+    assert decision.heaters_on is True
+
+
+def test_out_of_season_a_warm_room_is_not_cooled():
+    decision = decide(
+        config(has_cooler=True, has_heater=False, cooling_allowed=False),
+        Readings(room_temperature=25.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="cool", target=24.0, target_low=None, target_high=None),
+        idle(),
+        now=10_000.0,
+    )
+    assert decision.cooler == CoolerCommand(hvac_mode="off", target=None)
+    assert decision.hvac_action == "idle"
+
+
+def test_out_of_season_a_hot_room_is_cooled_anyway():
+    decision = decide(
+        config(has_cooler=True, has_heater=False, cooling_allowed=False),
+        Readings(room_temperature=28.1, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="cool", target=24.0, target_low=None, target_high=None),
+        idle(),
+        now=10_000.0,
+    )
+    assert decision.cooler.hvac_mode == "cool"
+    assert decision.hvac_action == "cooling"
+
+
+def test_drying_and_fan_only_are_never_gated():
+    """Moving air in January is a command the user gave, not the thermostat
+    deciding to run the heating plant."""
+    for mode, action in (("dry", "drying"), ("fan_only", "fan")):
+        decision = decide(
+            config(has_cooler=True, has_heater=False, cooling_allowed=False),
+            Readings(
+                room_temperature=20.0, room_humidity=None, cooler_temperature=None
+            ),
+            Request(hvac_mode=mode, target=None, target_low=None, target_high=None),
+            idle(),
+            now=10_000.0,
+        )
+        assert decision.cooler == CoolerCommand(hvac_mode=mode, target=None)
+        assert decision.hvac_action == action
+
+
+def test_heat_cool_gates_its_two_halves_independently():
+    """Out of heating season but in cooling season: the room may still cool."""
+    warm = decide(
+        config(has_cooler=True, heating_allowed=False, cooling_allowed=True),
+        Readings(room_temperature=26.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat_cool", target=None, target_low=20.0, target_high=25.0),
+        idle(),
+        now=10_000.0,
+    )
+    assert warm.cooler.hvac_mode == "cool"
+
+    cold = decide(
+        config(has_cooler=True, heating_allowed=False, cooling_allowed=True),
+        Readings(room_temperature=19.0, room_humidity=None, cooler_temperature=None),
+        Request(hvac_mode="heat_cool", target=None, target_low=20.0, target_high=25.0),
+        idle(),
+        now=10_000.0,
+    )
+    assert cold.heaters_on is False
