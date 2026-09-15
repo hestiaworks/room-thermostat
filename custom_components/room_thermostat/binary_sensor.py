@@ -1,4 +1,11 @@
-"""Whether this room wants heat.
+"""Whether this room wants heat, and whether the house is in season.
+
+The demand sensor is the interface to the boiler controller. The two season
+sensors travel the other way — one answer for the house that every room obeys
+— and they are here rather than in a module of their own because this is the
+binary_sensor platform and that is what they are.
+
+Original docstring follows.
 
 This is the whole interface between a room and the boiler controller that will
 later aggregate every room. Demand means the room's valves are open *and* have
@@ -15,12 +22,16 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, SIGNAL_DEMAND
+from . import entry_type
+from .const import DOMAIN, ENTRY_SEASONS, SIGNAL_DEMAND
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    if entry_type(entry) == ENTRY_SEASONS:
+        async_add_entities([HeatingSeason(entry), CoolingSeason(entry)])
+        return
     async_add_entities([HeatDemand(entry)])
 
 
@@ -54,3 +65,33 @@ class HeatDemand(BinarySensorEntity):
         self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_DEMAND, _demand)
         )
+
+
+class _Season(BinarySensorEntity):
+    """Placeholder. Reports on, which is the fail-open answer."""
+
+    _attr_has_entity_name = False
+    _attr_should_poll = False
+    key = ""
+    label = ""
+
+    def __init__(self, entry: ConfigEntry) -> None:
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_{self.key}"
+        self._attr_name = self.label
+        self._attr_is_on = True
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=entry.title,
+            manufacturer="Room Thermostat",
+        )
+
+
+class HeatingSeason(_Season):
+    key = "heating_season"
+    label = "Heating season"
+
+
+class CoolingSeason(_Season):
+    key = "cooling_season"
+    label = "Cooling season"

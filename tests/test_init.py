@@ -2,11 +2,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.room_thermostat import entry_type
 from custom_components.room_thermostat.config_flow import default_options
 from custom_components.room_thermostat.const import (
     CONF_HEATERS,
     CONF_TEMPERATURE_SENSOR,
     DOMAIN,
+    ENTRY_ROOM,
 )
 
 
@@ -57,3 +59,9 @@ async def test_a_lost_sensor_asks_a_human_for_help(hass: HomeAssistant):
 
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, f"sensor_lost_{entry.entry_id}") is not None
+
+
+def test_an_entry_without_a_type_is_a_room():
+    """Every room that exists today predates the key and must keep working."""
+    entry = MockConfigEntry(domain=DOMAIN, title="Bedroom", data={"name": "Bedroom"})
+    assert entry_type(entry) == ENTRY_ROOM
