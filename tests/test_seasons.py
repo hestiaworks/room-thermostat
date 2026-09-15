@@ -114,3 +114,42 @@ async def test_clearing_the_source_is_how_seasons_are_switched_off(
     )
     await hass.async_block_till_done()
     assert entry.options[CONF_OUTDOOR_SENSOR] is None
+
+
+def _seasons_entries(hass: HomeAssistant) -> list:
+    return [
+        entry
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_SEASONS
+    ]
+
+
+async def test_setting_up_a_room_brings_the_seasons_entry_into_being(
+    hass: HomeAssistant,
+):
+    hass.states.async_set("sensor.bedroom_temperature", "21.0")
+    entry = room(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert len(_seasons_entries(hass)) == 1
+
+
+async def test_two_rooms_do_not_bring_two(hass: HomeAssistant):
+    """Setting the component up sets up every room at once, which is exactly
+    the race the request has to survive."""
+    hass.states.async_set("sensor.bedroom_temperature", "21.0")
+    hass.states.async_set("sensor.kitchen_temperature", "21.0")
+    first, second = room(hass), room(hass, "Kitchen")
+    await hass.config_entries.async_setup(first.entry_id)
+    await hass.async_block_till_done()
+    assert str(second.state) == "ConfigEntryState.LOADED"  # alongside the first
+    assert len(_seasons_entries(hass)) == 1
+
+
+async def test_a_house_that_already_has_one_gains_no_second(hass: HomeAssistant):
+    hass.states.async_set("sensor.bedroom_temperature", "21.0")
+    seasons(hass)
+    entry = room(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert len(_seasons_entries(hass)) == 1
