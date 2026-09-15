@@ -39,6 +39,38 @@ unit is parked at a setpoint it can never satisfy, and the room's own sensor
 decides when it runs. Rooms whose units sense correctly should stay on
 **passthrough**, which forwards the setpoint and lets the compressor modulate.
 
+## Not heating a room in mild weather
+
+A room set to 22 °C calls for heat at 20 °C in September exactly as it does in
+January, because the only question it asks is whether it is below its setpoint.
+
+A **Seasons** entry appears alongside your rooms the first time one is set up.
+Give it an outdoor temperature — a sensor or a weather entity — and it decides
+once for the whole house whether heating and cooling are in season. Rooms obey
+it and have no seasonal settings of their own.
+
+Heating is decided on an **average** of the outdoor temperature rather than the
+reading, over 30 hours by default, so one warm afternoon does not end the
+heating season. On top of that an answer has to **last** — six hours by default
+— because a mild autumn dips below the heating limit for a few hours every night
+whatever the averaging, and heating that arrives before dawn and leaves by
+mid-morning is worse than none.
+
+Cooling is decided on the live reading with neither the average nor the wait: a
+sunny afternoon in an otherwise cold week still overheats a room that afternoon.
+
+Out of season a room still heats if it falls more than 4 °C below its setpoint,
+and still cools more than 4 °C above it — the weather is a guess and the room's
+own thermometer is not. Frost protection is never affected by any of this.
+
+Until you choose an outdoor source the entry does nothing at all and every room
+behaves as it did before. Clearing the source again is how you switch seasons
+off; the entry itself is created by the integration and comes back if deleted.
+
+**Where to put an outdoor sensor:** in shade, on a north wall, under an eave,
+away from the air conditioners' exhaust. One in October afternoon sun reads
+40 °C, which drags the average up and holds the heating off on a cold day.
+
 ## Licence
 
 MIT.
