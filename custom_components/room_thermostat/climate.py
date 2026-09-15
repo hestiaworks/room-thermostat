@@ -32,7 +32,7 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from . import control
+from . import control, seasons
 from .config_flow import sources
 from .const import (
     CONF_ALLOW_AC_HEAT,
@@ -252,6 +252,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
             for entity in (self._sensor, self._humidity, self._cooler, *self._heaters)
             if entity
         ]
+        heating_season, cooling_season = seasons.allowed(self.hass)
         missing = [
             entity
             for entity in watched
@@ -267,6 +268,10 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
             "heat_demand": self._demand,
             "frost_protection": self._frost,
             "unavailable_devices": missing,
+            # Why a room set to heat is sitting idle, without a trip to the
+            # Seasons device to find out.
+            "heating_season": heating_season,
+            "cooling_season": cooling_season,
         }
 
     @property
@@ -357,6 +362,8 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
 
     def _config(self) -> control.RoomConfig:
         options = self._options
+        heating_allowed, cooling_allowed = seasons.allowed(self.hass)
+        heat_override, cool_override = seasons.overrides(self.hass)
         return control.RoomConfig(
             has_cooler=bool(self._cooler),
             has_heater=bool(self._heaters),
@@ -377,6 +384,10 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
             frost_recovery=DEFAULT_FROST_RECOVERY,
             warm_on=DEFAULT_WARM_ON,
             warm_off=DEFAULT_WARM_OFF,
+            heating_allowed=heating_allowed,
+            cooling_allowed=cooling_allowed,
+            heat_override=heat_override,
+            cool_override=cool_override,
         )
 
     async def _apply(self) -> None:
@@ -531,7 +542,14 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
 
         sources = [
             entity
-            for entity in (self._sensor, self._humidity, self._cooler)
+            for entity in (
+                self._sensor,
+                self._humidity,
+                self._cooler,
+                # A season flipping is acted on at once rather than at the next
+                # tick, like any other input this room reads.
+                *seasons.season_entity_ids(self.hass),
+            )
             if entity
         ]
 

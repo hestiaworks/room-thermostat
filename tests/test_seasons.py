@@ -8,6 +8,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
+    async_mock_service,
 )
 
 from custom_components.room_thermostat.config_flow import default_options, season_options
@@ -313,3 +314,110 @@ async def test_a_long_lost_source_asks_a_human_for_help(
     hass.states.async_set("sensor.outdoor", "unavailable")
     await _advance(hass, freezer, hours=1.5)
     assert ir.async_get(hass).async_get_issue(DOMAIN, "outdoor_lost") is not None
+
+
+# --- a room obeying ------------------------------------------------------
+
+
+async def _heat_to(hass: HomeAssistant, target: float) -> None:
+    """Ask the room for heat. The radiator's own services are mocked, as in
+    every other test here: what matters is whether it is asked."""
+    async_mock_service(hass, "switch", "turn_on")
+    async_mock_service(hass, "switch", "turn_off")
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": target},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.bedroom", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+
+async def test_a_room_with_no_seasons_entry_behaves_as_before(hass: HomeAssistant):
+    """The upgrade path: a room is unchanged until a source is chosen."""
+    hass.states.async_set("sensor.bedroom_temperature", "20.0")
+    hass.states.async_set("switch.radiator", "off")
+    entry = room(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await _heat_to(hass, 22.0)
+    assert hass.states.get("climate.bedroom").attributes["hvac_action"] == "heating"
+
+
+async def test_a_seasons_entry_with_no_source_changes_nothing(hass: HomeAssistant):
+    hass.states.async_set("sensor.bedroom_temperature", "20.0")
+    hass.states.async_set("switch.radiator", "off")
+    seasons(hass)
+    entry = room(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await _heat_to(hass, 22.0)
+    assert hass.states.get("climate.bedroom").attributes["hvac_action"] == "heating"
+
+
+async def test_out_of_season_a_room_stops_heating_and_says_why(
+    hass: HomeAssistant, freezer
+):
+    hass.states.async_set("sensor.bedroom_temperature", "20.0")
+    hass.states.async_set("switch.radiator", "off")
+    hass.states.async_set("sensor.outdoor", "22.0")
+    seasons(hass, **{CONF_OUTDOOR_SENSOR: "sensor.outdoor"})
+    entry = room(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await _heat_to(hass, 22.0)
+    # It takes the dwell for the house to decide it is out of season.
+    await _advance(hass, freezer, hours=7)
+
+    state = hass.states.get("climate.bedroom")
+    assert state.attributes["hvac_action"] == "idle"
+    assert state.attributes["heating_season"] is False
+
+
+async def test_out_of_season_a_cold_room_still_heats(hass: HomeAssistant, freezer):
+    hass.states.async_set("sensor.bedroom_temperature", "17.0")
+    hass.states.async_set("switch.radiator", "off")
+    hass.states.async_set("sensor.outdoor", "22.0")
+    seasons(hass, **{CONF_OUTDOOR_SENSOR: "sensor.outdoor"})
+    entry = room(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await _heat_to(hass, 22.0)
+    await _advance(hass, freezer, hours=7)
+
+    state = hass.states.get("climate.bedroom")
+    assert state.attributes["heating_season"] is False
+    assert state.attributes["hvac_action"] == "heating"
+
+
+async def test_a_renamed_season_sensor_is_still_obeyed(
+    hass: HomeAssistant, freezer
+):
+    """Rooms find the sensors by unique id, so renaming one does not quietly
+    release every room in the house."""
+    from homeassistant.helpers import entity_registry as er
+
+    hass.states.async_set("sensor.bedroom_temperature", "20.0")
+    hass.states.async_set("switch.radiator", "off")
+    hass.states.async_set("sensor.outdoor", "22.0")
+    seasons_entry = seasons(hass, **{CONF_OUTDOOR_SENSOR: "sensor.outdoor"})
+    await hass.config_entries.async_setup(seasons_entry.entry_id)
+    await hass.async_block_till_done()
+    er.async_get(hass).async_update_entity(
+        "binary_sensor.heating_season", new_entity_id="binary_sensor.winter_is_here"
+    )
+    await hass.async_block_till_done()
+
+    entry = room(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await _heat_to(hass, 22.0)
+    await _advance(hass, freezer, hours=7)
+
+    assert hass.states.get("climate.bedroom").attributes["hvac_action"] == "idle"
