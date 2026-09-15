@@ -26,6 +26,77 @@ ACTION_FAN = "fan"
 MAX_OFFSET = 3.0
 
 
+def damp(previous: float | None, reading: float, elapsed: float, tau: float) -> float:
+    """An exponential moving average of the outdoor temperature.
+
+    The step is elapsed time over a time constant, so a source that reports
+    every five minutes and one that reports every thirty seconds converge on
+    the same curve, and a restart after an hour's gap is not a special case.
+
+    `tau` stands for the building's thermal mass — the same setting other
+    controllers offer as "building type: light, medium, heavy" — and is what
+    makes the decision take days rather than hours.
+
+    With no history there is nothing to average, so the first reading becomes
+    the average. The step is clamped to 1: Home Assistant can be off for a
+    week, and a step above one would fly past the reading and oscillate.
+    """
+    if previous is None or tau <= 0:
+        return reading
+    step = min(max(elapsed, 0.0) / tau, 1.0)
+    return previous + (reading - previous) * step
+
+
+def in_season(
+    currently: bool, value: float, limit: float, hysteresis: float, rising: bool
+) -> bool:
+    """Whether a season is on, entered on one edge and left on the other.
+
+    The same idiom as `_wants_heat`: the answer depends on the answer, so a
+    value sitting on the threshold cannot toggle day after day.
+
+    `rising` says which way the season is entered. Heating is entered as the
+    outdoor temperature falls; cooling as it rises.
+    """
+    if rising:
+        return value > limit - hysteresis if currently else value > limit
+    return value < limit + hysteresis if currently else value < limit
+
+
+def settled(
+    currently: bool,
+    candidate: bool,
+    pending_since: float | None,
+    now: float,
+    dwell: float,
+) -> tuple[bool, float | None]:
+    """Hold an answer until the thing disagreeing with it has lasted.
+
+    Hysteresis stops a value chattering across a threshold; it does nothing
+    about a threshold the value crosses properly twice a day. A mild autumn
+    whose daily mean sits a degree above the heating limit dips below it for a
+    few hours every night, however hard the average is damped — measured at
+    three hours with a thirty-hour time constant — and the heating would come
+    on before dawn and go away by mid-morning.
+
+    So a change has to last. This is also the only honest way to say "cold
+    weather must go on for a while before the heater is allowed": crossing a
+    limit that sits close to where the average already is takes hours, not the
+    days a time constant suggests, so the wait has to be a number somebody set
+    rather than a side effect of a filter.
+
+    Returns the answer to publish and what to remember: the moment the
+    disagreement started, or None when there is nothing pending.
+    """
+    if candidate == currently:
+        return currently, None
+    if pending_since is None:
+        return (candidate, None) if dwell <= 0 else (currently, now)
+    if now - pending_since >= dwell:
+        return candidate, None
+    return currently, pending_since
+
+
 @dataclass(frozen=True)
 class RoomConfig:
     has_cooler: bool

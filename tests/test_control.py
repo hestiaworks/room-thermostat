@@ -6,7 +6,10 @@ from custom_components.room_thermostat.control import (
     Readings,
     Request,
     RoomConfig,
+    damp,
     decide,
+    in_season,
+    settled,
 )
 
 
@@ -639,3 +642,139 @@ def test_the_blind_cycle_still_rests_when_the_room_is_off():
         now=1700.0,
     )
     assert decision.heaters_on is False
+
+
+# --- the season, decided from outdoor temperature ------------------------
+
+
+def test_damping_starts_from_the_first_reading():
+    """There is no history on a first run, so the first reading is the average."""
+    assert damp(None, 12.0, 30.0, 86_400.0) == 12.0
+
+
+def test_damping_reaches_63_percent_of_a_step_at_tau():
+    # A step from 0 to 10 with tau of one day, integrated in 30-second slices.
+    value = 0.0
+    for _ in range(2 * 60 * 24):
+        value = damp(value, 10.0, 30.0, 86_400.0)
+    assert 6.2 < value < 6.4
+
+
+def test_damping_reaches_95_percent_of_a_step_at_three_tau():
+    value = 0.0
+    for _ in range(2 * 60 * 24 * 3):
+        value = damp(value, 10.0, 30.0, 86_400.0)
+    assert 9.4 < value < 9.6
+
+
+def test_a_long_gap_cannot_overshoot_the_reading():
+    """Home Assistant can be off for a week. A step of elapsed/tau above one
+    would fly past the reading and oscillate."""
+    assert damp(0.0, 10.0, 86_400.0 * 30, 86_400.0) == 10.0
+
+
+def test_a_heating_season_is_entered_falling_and_left_a_degree_higher():
+    assert in_season(False, 15.9, 16.0, 1.0, rising=False) is True
+    assert in_season(False, 16.1, 16.0, 1.0, rising=False) is False
+    # Once in, it takes limit + hysteresis to leave.
+    assert in_season(True, 16.5, 16.0, 1.0, rising=False) is True
+    assert in_season(True, 17.1, 16.0, 1.0, rising=False) is False
+
+
+def test_a_cooling_season_is_entered_rising_and_left_a_degree_lower():
+    assert in_season(False, 15.1, 15.0, 1.0, rising=True) is True
+    assert in_season(False, 14.9, 15.0, 1.0, rising=True) is False
+    assert in_season(True, 14.5, 15.0, 1.0, rising=True) is True
+    assert in_season(True, 13.9, 15.0, 1.0, rising=True) is False
+
+
+def test_the_dwell_holds_an_answer_until_the_condition_has_lasted():
+    # The candidate disagrees, but not for long enough yet.
+    answer, pending = settled(False, True, None, now=0.0, dwell=21_600.0)
+    assert (answer, pending) == (False, 0.0)
+    answer, pending = settled(False, True, 0.0, now=3_600.0, dwell=21_600.0)
+    assert (answer, pending) == (False, 0.0)
+    # Six hours later it is allowed through.
+    answer, pending = settled(False, True, 0.0, now=21_600.0, dwell=21_600.0)
+    assert (answer, pending) == (True, None)
+
+
+def test_a_condition_that_goes_away_restarts_the_dwell():
+    """A three-hour dip that ends is not a season changing."""
+    answer, pending = settled(False, True, 0.0, now=10_800.0, dwell=21_600.0)
+    assert answer is False
+    # It agrees again, so there is nothing pending.
+    answer, pending = settled(False, False, pending, now=10_900.0, dwell=21_600.0)
+    assert (answer, pending) == (False, None)
+
+
+def test_a_zero_dwell_changes_at_once():
+    assert settled(False, True, None, now=0.0, dwell=0.0) == (True, None)
+
+
+def test_a_day_swinging_ten_to_twenty_four_never_enters_heating_season():
+    """The case this feature exists for: mild autumn, 16 degree limit.
+
+    A 17 degree mean sits one degree above the limit, and at tau = 30 h the
+    residual daily ripple is 0.9 — measured, in the spec's amendment. The dwell
+    is what makes this safe at any tau: the dip is hours, the dwell is six.
+    """
+    import math
+
+    value = 17.0
+    answer = False
+    pending = None
+    tau = 30 * 3600.0
+    for tick in range(2 * 60 * 24 * 4):  # four days, 30-second steps
+        now = tick * 30.0
+        hour = (now / 3600) % 24
+        outdoor = 17.0 - 7.0 * math.cos((hour - 14.0) / 24.0 * 2 * math.pi)
+        value = damp(value, outdoor, 30.0, tau)
+        candidate = in_season(answer, value, 16.0, 1.0, rising=False)
+        answer, pending = settled(answer, candidate, pending, now, dwell=21_600.0)
+    assert answer is False
+
+
+def test_the_dwell_is_not_a_substitute_for_the_time_constant():
+    """At tau = 12 h the nightly dip lasts around eight hours — measured — and
+    a six-hour dwell cannot hold an answer against a dip longer than itself.
+    Both settings matter, and this is what a tau set too low costs."""
+    import math
+
+    value = 17.0
+    answer = False
+    pending = None
+    was = False
+    changes = 0
+    for tick in range(2 * 60 * 24 * 4):
+        now = tick * 30.0
+        hour = (now / 3600) % 24
+        outdoor = 17.0 - 7.0 * math.cos((hour - 14.0) / 24.0 * 2 * math.pi)
+        value = damp(value, outdoor, 30.0, 12 * 3600.0)
+        candidate = in_season(answer, value, 16.0, 1.0, rising=False)
+        answer, pending = settled(answer, candidate, pending, now, dwell=21_600.0)
+        changes += answer != was
+        was = answer
+    assert changes > 0
+
+
+def test_a_cold_spell_enters_heating_season_once_it_has_lasted_the_dwell():
+    """Not days: crossing a limit that sits near the current average takes
+    hours. The dwell is what makes the wait deliberate rather than an accident
+    of the time constant."""
+    value = 17.0
+    answer = False
+    pending = None
+    became = None
+    for tick in range(2 * 60 * 24 * 3):
+        now = tick * 30.0
+        value = damp(value, 8.0, 30.0, 30 * 3600.0)
+        candidate = in_season(answer, value, 16.0, 1.0, rising=False)
+        was = answer
+        answer, pending = settled(answer, candidate, pending, now, dwell=21_600.0)
+        if answer and not was:
+            became = now / 3600
+            break
+    assert answer is True
+    # Roughly the dwell after the average crossed, and well inside a day.
+    assert 6.0 < became < 12.0
