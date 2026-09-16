@@ -456,6 +456,7 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .line.room-1 { stroke:#6FB1D9; } .line.room-2 { stroke:#9AD96F; } .line.room-3 { stroke:#D98FBF; }
 text.axis { fill:var(--muted); font:400 11px/1 var(--font-mono); }
 circle.day { fill:var(--accent); }
+text.measured-label { fill:var(--accent-ink); }
 line.fit { stroke:var(--ink); stroke-width:1.5; }
 line.measured { stroke:var(--accent); stroke-width:1; stroke-dasharray:3 3; }
 
@@ -1133,6 +1134,130 @@ class RoomThermostatPage extends HTMLElement {
     </div>`;
   }
 
+  /** The fitted line's height at an outdoor temperature, for drawing it. */
+  hoursAt(days, outdoor) {
+    const used = days.filter((day) => day.hours > 0);
+    if (used.length < 3) return 0;
+    const count = used.length;
+    const meanX = used.reduce((total, day) => total + day.outdoor, 0) / count;
+    const meanY = used.reduce((total, day) => total + day.hours, 0) / count;
+    const covariance = used.reduce(
+      (total, day) => total + (day.outdoor - meanX) * (day.hours - meanY), 0);
+    const variance = used.reduce((total, day) => total + (day.outdoor - meanX) ** 2, 0);
+    if (!variance) return meanY;
+    return Math.max(0, meanY + (covariance / variance) * (outdoor - meanX));
+  }
+
+  /**
+   * One dot per day: hours of heating against that day's mean outdoor
+   * temperature. Every heated building draws this line, and where it reaches
+   * zero is the balance point — the temperature above which the house holds
+   * itself, measured from days actually lived through rather than estimated.
+   */
+  signature(data) {
+    const days = data.daily || [];
+    const limit = Number(this.house.heat_limit);
+    if (days.length < 10) {
+      return `<section class="signature">
+        <h3>Energy signature</h3>
+        <p class="muted">One dot per day: hours of heating against that day's
+        mean outdoor temperature. Where the line reaches zero is this house's
+        balance point — the outdoor temperature above which it holds itself,
+        which is what the heating limit of ${limit.toFixed(1)} °C is meant to be
+        and is currently a figure out of a book. It needs a few weeks of heating
+        weather before it can say anything; ${days.length}
+        day${days.length === 1 ? "" : "s"} so far.</p>
+      </section>`;
+    }
+    const width = 560;
+    const height = 280;
+    const pad = { left: 44, right: 16, top: 16, bottom: 30 };
+    const maxHours = Math.max(6, ...days.map((day) => day.hours));
+    const measured = data.balance_point;
+    const outs = days.map((day) => day.outdoor);
+    const minOut = Math.floor(Math.min(...outs));
+    const maxOut = Math.ceil(Math.max(...outs, measured ?? -Infinity, limit));
+    const x = (value) =>
+      pad.left + ((value - minOut) / Math.max(1, maxOut - minOut)) * (width - pad.left - pad.right);
+    const y = (value) =>
+      pad.top + (1 - value / maxHours) * (height - pad.top - pad.bottom);
+
+    const fit = measured === null || measured === undefined
+      ? ""
+      : `<line class="fit" x1="${x(minOut).toFixed(1)}" y1="${y(this.hoursAt(days, minOut)).toFixed(1)}"
+               x2="${x(measured).toFixed(1)}" y2="${y(0).toFixed(1)}"></line>
+         <line class="measured" x1="${x(measured).toFixed(1)}" x2="${x(measured).toFixed(1)}"
+               y1="${pad.top}" y2="${y(0).toFixed(1)}"></line>`;
+
+    const verdict = measured === null || measured === undefined
+      ? `<p class="muted">Not enough days that used heat to draw a line through yet.</p>`
+      : `<p>Measured balance point <strong>${measured.toFixed(1)} °C</strong>, against a
+         heating limit of ${limit.toFixed(1)}. ${
+          Math.abs(measured - limit) < 0.5
+            ? "Your limit is where this house says it should be."
+            : measured < limit
+              ? `The house holds itself ${(limit - measured).toFixed(1)} °C colder than the
+                 limit assumes, so heating runs on days it need not.`
+              : `The house wants heat ${(measured - limit).toFixed(1)} °C warmer than the
+                 limit allows, so it is held back on days it would use it.`}</p>`;
+
+    return `<section class="signature">
+      <h3>Energy signature</h3>
+      <div class="chart">
+        <svg viewBox="0 0 ${width} ${height}" role="img"
+             aria-label="Heating hours per day against that day's mean outdoor temperature">
+          <line class="limit" x1="${x(limit).toFixed(1)}" x2="${x(limit).toFixed(1)}"
+                y1="${pad.top}" y2="${y(0).toFixed(1)}"></line>
+          <text class="axis" text-anchor="middle" x="${x(limit).toFixed(1)}" y="${(pad.top + 10).toFixed(1)}">limit</text>
+          ${fit}
+          ${days.map((day) =>
+            `<circle class="day" cx="${x(day.outdoor).toFixed(1)}" cy="${y(day.hours).toFixed(1)}" r="3"></circle>`).join("")}
+          <line class="axis-line" x1="${pad.left}" x2="${width - pad.right}"
+                y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}"></line>
+          <text class="axis" x="4" y="${(y(maxHours) + 8).toFixed(1)}">${maxHours.toFixed(0)} h</text>
+          <text class="axis" x="4" y="${y(0).toFixed(1)}">0</text>
+          <text class="axis" x="${x(minOut).toFixed(1)}" y="${height - 8}">${minOut} °C</text>
+          <text class="axis" text-anchor="end" x="${x(maxOut).toFixed(1)}" y="${height - 8}">${maxOut} °C</text>
+          ${measured === null || measured === undefined ? "" :
+            `<text class="axis measured-label" text-anchor="middle" x="${x(measured).toFixed(1)}" y="${height - 8}">${measured.toFixed(1)}</text>
+             <text class="axis measured-label" text-anchor="middle" x="${x(measured).toFixed(1)}" y="${(pad.top + 10).toFixed(1)}">measured</text>`}
+        </svg>
+      </div>
+      ${verdict}
+    </section>`;
+  }
+
+  /**
+   * The rooms against each other. Counting, not modelling — and it points at
+   * which room is the problem without pretending to know why.
+   */
+  roomTable(data) {
+    const rows = Object.entries(data.demand).map(([roomId, points]) => {
+      const room = data.series.rooms[roomId];
+      const ran = points.filter((value) => value).length;
+      const readings = (room?.points || []).filter((value) => value !== null && value !== undefined);
+      const low = readings.length ? Math.min(...readings) : null;
+      const high = readings.length ? Math.max(...readings) : null;
+      return {
+        name: room?.name || roomId,
+        ran: Math.round((ran / Math.max(1, data.buckets)) * 100),
+        low, high,
+        swing: low === null ? null : high - low,
+      };
+    }).sort((first, second) => second.ran - first.ran);
+    if (!rows.length) return "";
+    return `<table class="rooms-table">
+      <thead><tr><th>Room</th><th>Ran</th><th>Coldest</th><th>Warmest</th><th>Swing</th></tr></thead>
+      <tbody>${rows.map((row) => `<tr>
+        <td>${escapeHtml(row.name)}</td>
+        <td>${row.ran} %</td>
+        <td>${row.low === null ? "—" : row.low.toFixed(1)}</td>
+        <td>${row.high === null ? "—" : row.high.toFixed(1)}</td>
+        <td>${row.swing === null ? "—" : row.swing.toFixed(1)}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }
+
   historyTab() {
     const spans = `<nav class="spans">
       ${["24h", "7d", "30d", "90d"].map((span) =>
@@ -1153,6 +1278,8 @@ class RoomThermostatPage extends HTMLElement {
         ${spans}
         ${this.timeline(data)}
         ${this.demandRows(data)}
+        ${this.signature(data)}
+        ${this.roomTable(data)}
       </div>`;
   }
 

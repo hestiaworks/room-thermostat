@@ -206,3 +206,32 @@ def test_the_time_axis_is_labelled_at_both_ends(source: str):
 
 def test_a_span_with_nothing_recorded_says_so(source: str):
     assert "Nothing recorded over this span yet" in source
+
+
+# --- the energy signature ------------------------------------------------
+
+
+def test_the_signature_says_what_it_needs_before_it_can_speak(source: str):
+    """Weeks of heating weather. An empty chart with no explanation reads as
+    broken."""
+    assert "before it can say anything" in source
+    assert "day${days.length === 1" in source
+
+
+def test_the_measured_balance_point_is_shown_against_the_setting(source: str):
+    """The number on its own is trivia; beside the limit it is a decision."""
+    assert "balance_point" in source
+    assert "heat_limit" in source
+    assert "Measured balance point" in source
+
+
+def test_the_verdict_says_which_way_the_limit_is_wrong(source: str):
+    assert "heating runs on days it need not" in source
+    assert "held back on days it would use it" in source
+
+
+def test_only_days_that_used_heat_are_fitted(source: str):
+    """Summer days sit flat on zero and would bend a line that is only
+    meaningful where heating ran."""
+    fit = source[source.index("hoursAt(days, outdoor)") : source.index("signature(data)")]
+    assert "day.hours > 0" in fit
