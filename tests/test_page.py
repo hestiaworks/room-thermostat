@@ -179,3 +179,30 @@ def test_an_empty_outdoor_source_saves_as_null(source: str):
 
 def test_the_house_says_when_it_has_nothing_to_hold_back(source: str):
     assert "nothing is held back" in source
+
+
+# --- the timeline --------------------------------------------------------
+
+
+def test_the_hysteresis_is_drawn_as_a_band(source: str):
+    """A line cannot show an average that entered the band and did not leave
+    it, which is the whole behaviour the band exists to explain."""
+    assert "hysteresis-band" in source
+    assert 'y="${y(limit + hysteresis)' in source
+
+
+def test_a_gap_in_a_series_breaks_the_line(source: str):
+    """A sensor that was offline did not read zero. Joining across the gap
+    draws a plunge that never happened."""
+    path = source[source.index("  path(points, x, y) {") : source.index("timelineSeries(")]
+    assert "value === null" in path
+    assert "open = false" in path
+
+
+def test_the_time_axis_is_labelled_at_both_ends(source: str):
+    assert "when(data.start" in source
+    assert "when(data.end" in source
+
+
+def test_a_span_with_nothing_recorded_says_so(source: str):
+    assert "Nothing recorded over this span yet" in source

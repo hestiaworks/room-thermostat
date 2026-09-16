@@ -443,7 +443,9 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
   overflow-x:auto; }
 .chart svg { display:block; width:100%; height:auto; min-width:320px; }
 
-.season-band { fill:var(--accent-wash); }
+/* A wash, not a block. The season is context behind the lines, and at full
+   strength it read as the most important thing on the chart. */
+.demand-row.season .bars i { background:var(--muted); }
 .hysteresis-band { fill:var(--surface-raised); }
 .limit { stroke:var(--muted); stroke-width:1; stroke-dasharray:4 4; }
 .axis-line { stroke:var(--line); stroke-width:1; }
@@ -461,15 +463,21 @@ line.measured { stroke:var(--accent); stroke-width:1; stroke-dasharray:3 3; }
   padding:0; }
 .legend button { font:400 12px/1 var(--font); padding:var(--s2) var(--s3); }
 .legend button.off { color:var(--disabled); }
-.legend .swatch { display:inline-block; width:10px; height:2px; margin-right:6px;
-  vertical-align:middle; }
+.legend .swatch { display:inline-block; width:12px; height:2px; margin-right:6px;
+  vertical-align:middle; background:var(--muted); }
+.legend .swatch.damped { background:var(--accent); height:3px; }
+.legend .swatch.room-1 { background:#6FB1D9; }
+.legend .swatch.room-2 { background:#9AD96F; }
+.legend .swatch.room-3 { background:#D98FBF; }
 
 .demand { display:flex; flex-direction:column; gap:var(--s2); }
 .demand-row { display:flex; align-items:center; gap:var(--s3); min-width:0; }
 .demand-name { width:9em; flex:none; color:var(--muted); font:400 13px/1 var(--font);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.bars { display:flex; gap:1px; flex:1; min-width:0; height:18px; }
-.bars i { flex:1; background:var(--accent); min-width:1px; }
+/* One bar per bucket, and there can be 168 of them. The row clips rather
+   than pushes: a bar a pixel too wide would otherwise widen the page. */
+.bars { display:flex; gap:1px; flex:1; min-width:0; height:18px; overflow:hidden; }
+.bars i { flex:1 1 0; background:var(--accent); min-width:0; }
 
 .signature h3 { font:600 16px/1.2 var(--font); margin:0 0 var(--s3); }
 .signature p { margin:var(--s3) 0 0; max-width:62ch; }
@@ -521,6 +529,19 @@ const PROBLEMS = {
     "That is one of this integration's own entities — a room set to drive it would drive itself.",
   no_devices:
     "A room that can neither heat nor cool is a thermometer. Give it an air conditioner, a heater, or both.",
+};
+
+/**
+ * A moment on the time axis, at the resolution the span deserves.
+ *
+ * A 24-hour chart wants a clock and a 90-day one wants a date; both on both
+ * is noise.
+ */
+const when = (timestamp, span) => {
+  const at = new Date(timestamp * 1000);
+  return span === "24h"
+    ? at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : at.toLocaleDateString([], { day: "numeric", month: "short" });
 };
 
 /** What a room is doing, in words rather than identifiers. */
@@ -984,12 +1005,156 @@ class RoomThermostatPage extends HTMLElement {
       </form>`;
   }
 
-  historyTab() {
-    return `<div class="page-head"><h1>History</h1></div>
-      <p class="muted">The charts arrive next.</p>`;
+  async loadHistory() {
+    this.history = null;
+    this.render();
+    try {
+      this.history = await this.call({
+        type: "room_thermostat/history",
+        span: this.span,
+      });
+      this.error = "";
+    } catch (err) {
+      this.error = err?.message || "Could not read the history";
+    }
+    this.render();
   }
 
-  async loadHistory() {}
+  /**
+   * A path through bucketed values, broken wherever there is a gap.
+   *
+   * A sensor that was offline did not read zero, so joining across a gap
+   * draws a plunge that never happened. Each run of real values is its own
+   * move-and-line.
+   */
+  path(points, x, y) {
+    let d = "";
+    let open = false;
+    points.forEach((value, index) => {
+      if (value === null || value === undefined) {
+        open = false;
+        return;
+      }
+      d += `${open ? "L" : "M"}${x(index).toFixed(1)},${y(value).toFixed(1)} `;
+      open = true;
+    });
+    return d.trim();
+  }
+
+  timelineSeries(data) {
+    const rooms = Object.entries(data.series.rooms);
+    return [
+      { key: "outdoor", label: "Outdoor", points: data.series.outdoor, className: "outdoor" },
+      { key: "damped", label: "Outdoor average", points: data.series.damped, className: "damped" },
+      ...rooms.map(([id, room], index) => ({
+        key: id,
+        label: room.name,
+        points: room.points,
+        className: `room room-${(index % 3) + 1}`,
+      })),
+    ];
+  }
+
+  timeline(data) {
+    const width = 960;
+    const height = 280;
+    const pad = { left: 40, right: 14, top: 14, bottom: 26 };
+    const house = this.house;
+    const limit = Number(house.heat_limit);
+    const hysteresis = Number(house.heat_limit_hysteresis);
+    const shown = this.timelineSeries(data).filter((line) => !this.hiddenSeries.has(line.key));
+    const values = shown
+      .flatMap((line) => line.points)
+      .filter((value) => value !== null && value !== undefined);
+    if (!values.length) {
+      return `<div class="chart"><p class="muted">Nothing recorded over this span yet.</p></div>`;
+    }
+    const low = Math.floor(Math.min(limit - 2, ...values));
+    const high = Math.ceil(Math.max(limit + hysteresis + 2, ...values));
+    const x = (index) =>
+      pad.left + (index / Math.max(1, data.buckets - 1)) * (width - pad.left - pad.right);
+    const y = (value) =>
+      pad.top + (1 - (value - low) / Math.max(1, high - low)) * (height - pad.top - pad.bottom);
+    return `<div class="chart">
+      <svg viewBox="0 0 ${width} ${height}" role="img"
+           aria-label="Outdoor and indoor temperatures against the heating limit">
+        <rect class="hysteresis-band" x="${pad.left}" y="${y(limit + hysteresis).toFixed(1)}"
+              width="${width - pad.left - pad.right}"
+              height="${Math.max(1, y(limit) - y(limit + hysteresis)).toFixed(1)}"></rect>
+        <line class="limit" x1="${pad.left}" x2="${width - pad.right}"
+              y1="${y(limit).toFixed(1)}" y2="${y(limit).toFixed(1)}"></line>
+        ${shown.map((line) =>
+          `<path class="line ${line.className}" d="${this.path(line.points, x, y)}"></path>`).join("")}
+        <text class="axis" x="4" y="${(y(high) + 8).toFixed(1)}">${high}</text>
+        <text class="axis" x="4" y="${y(limit).toFixed(1)}">${limit.toFixed(0)}</text>
+        <text class="axis" x="4" y="${y(low).toFixed(1)}">${low}</text>
+        <text class="axis" x="${pad.left}" y="${height - 6}">${when(data.start, this.span)}</text>
+        <text class="axis" text-anchor="end" x="${width - pad.right}" y="${height - 6}">${when(data.end, this.span)}</text>
+      </svg>
+      <ul class="legend">
+        ${this.timelineSeries(data).map((line) =>
+          `<li><button data-series="${line.key}" class="${this.hiddenSeries.has(line.key) ? "off" : ""}">
+            <span class="swatch ${line.className}"></span>${escapeHtml(line.label)}
+          </button></li>`).join("")}
+      </ul>
+    </div>`;
+  }
+
+  /** The season spans as one value per bucket, to sit under the same axis. */
+  seasonBuckets(data) {
+    const width = (data.end - data.start) / data.buckets;
+    return Array.from({ length: data.buckets }, (_, index) => {
+      const at = data.start + (index + 0.5) * width;
+      return data.seasons.some(([from, to]) => at >= from && at < to) ? 1 : 0;
+    });
+  }
+
+  demandRows(data) {
+    const rooms = Object.entries(data.demand);
+    // The season goes here rather than as a wash behind the chart: a block
+    // that size was the loudest thing on a plot of thin lines, and down here
+    // it sits under the same axis and says its own name.
+    const season = `<div class="demand-row season">
+      <span class="demand-name">Heating season</span>
+      <span class="bars">${this.seasonBuckets(data).map((value) =>
+        `<i style="opacity:${value ? 1 : 0.06}"></i>`).join("")}</span>
+    </div>`;
+    if (!rooms.length) return `<div class="demand">${season}</div>`;
+    return `<div class="demand">
+      ${season}
+      ${rooms.map(([roomId, points]) => {
+        const name = data.series.rooms[roomId]?.name || roomId;
+        return `<div class="demand-row">
+          <span class="demand-name">${escapeHtml(name)}</span>
+          <span class="bars">${points.map((value) =>
+            `<i style="opacity:${value === null || value === undefined ? 0 : Math.max(0.06, value).toFixed(2)}"></i>`).join("")}</span>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }
+
+  historyTab() {
+    const spans = `<nav class="spans">
+      ${["24h", "7d", "30d", "90d"].map((span) =>
+        `<button data-span="${span}" class="${span === this.span ? "active" : ""}">${span}</button>`).join("")}
+    </nav>`;
+    if (!this.history) {
+      return `<div class="page-head"><h1>History</h1></div>${spans}
+        <p class="muted">Reading the history…</p>`;
+    }
+    const data = this.history;
+    return `<div class="page-head">
+        <h1>History</h1>
+        <p>One time axis: what it was like outside, what each room read, and
+        when the heating ran. The band is the hysteresis around the heating
+        limit — the average has to cross the whole of it to change the season.</p>
+      </div>
+      <div class="history">
+        ${spans}
+        ${this.timeline(data)}
+        ${this.demandRows(data)}
+      </div>`;
+  }
 
   /** The draft as the record wants it: lists as lists, numbers as numbers. */
   roomPayload() {
