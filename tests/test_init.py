@@ -127,3 +127,18 @@ def test_the_page_module_url_matches_the_manifest_version():
         ).read_text()
     )
     assert PAGE_MODULE_URL.endswith(f"?v={manifest['version']}")
+
+
+def test_the_page_defines_the_element_home_assistant_will_look_for():
+    """A panel registered from an integration is instantiated as
+    ha-panel-<component_name>. Defining only the bare name gives a sidebar
+    entry that opens on nothing at all, which is exactly what it did."""
+    from pathlib import Path
+
+    from custom_components.room_thermostat.const import PAGE_COMPONENT
+
+    source = (
+        Path(__file__).parent.parent
+        / "custom_components/room_thermostat/frontend/room-thermostat-page.js"
+    ).read_text()
+    assert f'customElements.define("ha-panel-{PAGE_COMPONENT}"' in source

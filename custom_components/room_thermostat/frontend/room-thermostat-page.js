@@ -27,4 +27,17 @@ class RoomThermostatPage extends HTMLElement {
   }
 }
 
-customElements.define("room-thermostat-page", RoomThermostatPage);
+/*
+ * Home Assistant instantiates `ha-panel-<component_name>` for a panel
+ * registered from an integration, so that is the name that has to exist. The
+ * bare name is defined too, for anyone embedding the element directly.
+ */
+if (!customElements.get("ha-panel-room-thermostat-page")) {
+  customElements.define("ha-panel-room-thermostat-page", RoomThermostatPage);
+}
+if (!customElements.get("room-thermostat-page")) {
+  customElements.define(
+    "room-thermostat-page",
+    class extends RoomThermostatPage {},
+  );
+}
