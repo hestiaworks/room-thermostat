@@ -275,27 +275,6 @@ try {
     writeFileSync(out, Buffer.from(shot.data, "base64"));
     // An audit is a list of names and numbers: worth having in the terminal,
     // where it can be diffed and looped over, not only in a picture.
-    if (args.includes("--probe")) {
-      const probe = await send("Runtime.evaluate", {
-        expression: `(() => {
-          const el = document.querySelector("ha-panel-room-thermostat-page");
-          const box = (sel) => {
-            const node = el?.shadowRoot?.querySelector(sel);
-            if (!node) return sel + "=missing";
-            const r = node.getBoundingClientRect();
-            return sel + "=" + [r.x, r.y, r.width, r.height].map(Math.round).join(",");
-          };
-          return JSON.stringify({
-            title: document.title,
-            host: (() => { const r = el.getBoundingClientRect(); return [r.width, r.height].map(Math.round).join("x"); })(),
-            boxes: [".app-bar", "nav.tabs", "main.page", ".page-head h1"].map(box).join(" "),
-            text: (el?.shadowRoot?.querySelector("main")?.innerText || "").slice(0, 120),
-          });
-        })()`,
-        returnByValue: true,
-      });
-      console.log("PROBE", probe.result.value);
-    }
     if (args.includes("--audit")) {
       const report = await send("Runtime.evaluate", {
         expression: "document.querySelector('pre')?.textContent || 'no report'",

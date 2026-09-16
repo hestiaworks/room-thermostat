@@ -16,10 +16,28 @@ Add this repository to HACS as a custom repository of type **Integration**,
 download it, and restart Home Assistant. Then **Settings → Devices & Services →
 Add Integration → Room Thermostat**, once for the house.
 
-Everything else happens on the **Room Thermostat** page in the sidebar: adding
-rooms, configuring them, setting the heating and cooling seasons, and looking
-at what the house has been doing. There is nothing to configure under Helpers,
-and a room is never edited in two places.
+Everything else happens on the **Room Thermostat** page in the sidebar.
+
+**Rooms** shows a card per room — what it reads, what it is set to, what it is
+doing, and *why* when that needs explaining — and is where rooms are added,
+configured and deleted. Mode and setpoint on a card take effect at once; they
+are commands to a thermostat rather than edits to a record.
+
+**House** holds the heating and cooling seasons, with a sentence under the
+outdoor source saying what the numbers currently mean: what the average is,
+which side of the limit it falls, and what would have to happen for that to
+change.
+
+**History** draws outdoor and indoor temperatures on one axis, with the
+hysteresis band across it and a strip showing when each room ran. Beneath that
+is the **energy signature**: one dot per day, hours of heating against that
+day's mean outdoor temperature. Where that line reaches zero is your house's
+balance point, measured rather than guessed — which is what the heating limit
+is supposed to be. It needs a few weeks of heating weather before it says
+anything.
+
+There is nothing to configure under Helpers, and a room is never edited in two
+places.
 
 Upgrading from an earlier version moves your existing rooms onto that page by
 itself. Entity ids do not change, so dashboards, automations and panels keep
