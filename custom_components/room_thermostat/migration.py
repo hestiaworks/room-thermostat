@@ -20,6 +20,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_ROOM
+
+# What the house's settings were kept in for one version, before there was a
+# hub to hold them. Written out rather than imported: the entry type is gone,
+# and this is the only thing that still needs to know the word.
+_ENTRY_SEASONS = "seasons"
 from .model import Room
 from .store import RoomStore
 
@@ -52,6 +57,31 @@ def as_room(entry: ConfigEntry) -> Room:
     return Room.from_dict(merged)
 
 
+async def _fold_seasons(hass: HomeAssistant, hub: ConfigEntry) -> None:
+    """Take the house's settings out of the Seasons entry and remove it.
+
+    That entry existed because there was nowhere else to put a setting that
+    was not per-room. The record is somewhere else, so the settings move and
+    the entry goes — with the source somebody chose, which is the only setting
+    they are likely to have made.
+
+    Its two sensors go with it. They are a version old, their ids were shaped
+    by the entry they hung off, and the hub builds better-named ones; what
+    would be lost is a day or two of history on a feature that was never
+    released.
+    """
+    store: RoomStore = hass.data[DOMAIN]["store"]
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.data.get(CONF_ENTRY_TYPE) != _ENTRY_SEASONS:
+            continue
+        if entry.state is ConfigEntryState.SETUP_IN_PROGRESS:
+            continue
+        if entry.options:
+            await store.async_update_house(dict(entry.options))
+        await hass.config_entries.async_remove(entry.entry_id)
+        _LOGGER.info("Folded the Seasons entry into the Room Thermostat record")
+
+
 async def async_migrate(hass: HomeAssistant, hub: ConfigEntry) -> int:
     """Move every legacy room entry into the record. Returns how many moved.
 
@@ -59,6 +89,8 @@ async def async_migrate(hass: HomeAssistant, hub: ConfigEntry) -> int:
     already gone is not there to find, so an interruption halfway is
     recoverable rather than fatal.
     """
+    await _fold_seasons(hass, hub)
+
     store: RoomStore = hass.data[DOMAIN]["store"]
     legacy = [
         entry

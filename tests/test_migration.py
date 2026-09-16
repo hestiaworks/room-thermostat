@@ -221,3 +221,47 @@ async def test_a_house_with_rooms_and_no_hub_gets_one(hass: HomeAssistant):
     assert [e.data.get(CONF_ENTRY_TYPE) for e in entries] == [ENTRY_HUB]
     assert hass.states.get("climate.bedroom") is not None
     assert er.async_get(hass).async_get("climate.bedroom").unique_id == room.entry_id
+
+
+async def test_a_seasons_entry_folds_into_the_record(hass: HomeAssistant):
+    """0.12.0 put the house's settings in an entry of their own. A house that
+    ran it has one, with a source somebody chose, and losing that would be
+    losing the only setting they had made."""
+    seasons = MockConfigEntry(
+        domain=DOMAIN,
+        title="Seasons",
+        data={CONF_ENTRY_TYPE: "seasons"},
+        options={
+            "outdoor_sensor": "weather.forecast_home",
+            "heat_limit": 17.5,
+            "damping_hours": 30.0,
+            "season_dwell_hours": 6.0,
+        },
+    )
+    seasons.add_to_hass(hass)
+
+    await hub(hass)
+
+    house = hass.data[DOMAIN]["store"].house
+    assert house.outdoor_sensor == "weather.forecast_home"
+    assert house.heat_limit == 17.5
+    assert seasons.entry_id not in [
+        entry.entry_id for entry in hass.config_entries.async_entries(DOMAIN)
+    ]
+
+
+async def test_the_folded_settings_reach_the_sensors(hass: HomeAssistant):
+    hass.states.async_set("sensor.outdoor", "8.0")
+    seasons = MockConfigEntry(
+        domain=DOMAIN,
+        title="Seasons",
+        data={CONF_ENTRY_TYPE: "seasons"},
+        options={"outdoor_sensor": "sensor.outdoor", "heat_limit": 17.5},
+    )
+    seasons.add_to_hass(hass)
+
+    await hub(hass)
+
+    state = hass.states.get("binary_sensor.heating_season")
+    assert state.attributes["limit"] == 17.5
+    assert state.attributes["damped"] == 8.0

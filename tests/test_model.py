@@ -1,5 +1,6 @@
 """The records the page edits, and what makes one invalid."""
 
+from custom_components.room_thermostat.const import CONTROLS
 from custom_components.room_thermostat.model import House, Room, room_problems
 
 
@@ -82,3 +83,17 @@ def test_a_complete_room_has_no_problems():
          "heaters": ["switch.radiator"]},
         own_entity_ids=set(),
     ) == {}
+
+
+def test_a_source_written_as_null_falls_back_to_none_of_them():
+    """A room's form wrote every source key, including the ones left empty, so
+    a real room has heaters: null rather than no heaters key at all. Carrying
+    the null through makes a record that cannot be written back out."""
+    room = Room.from_dict(
+        {"id": "abc", "name": "Living Room", "heaters": None,
+         "inverted_heaters": None, "visible_controls": None}
+    )
+    assert room.heaters == ()
+    assert room.inverted_heaters == ()
+    assert room.visible_controls == CONTROLS
+    assert room.to_dict()["heaters"] == []

@@ -77,7 +77,15 @@ class Room:
     def from_dict(cls, data: dict[str, Any]) -> Room:
         known = _known(cls, data)
         for key in _SEQUENCES:
-            if known.get(key) is not None:
+            if key not in known:
+                continue
+            if known[key] is None:
+                # A room's form wrote every source key, including the ones
+                # left empty, so a real room carries heaters: null rather than
+                # no heaters key. Carried through, it makes a record that
+                # cannot be written back out.
+                del known[key]
+            else:
                 known[key] = tuple(known[key])
         return cls(**known)
 
