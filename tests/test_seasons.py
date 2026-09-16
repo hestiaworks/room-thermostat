@@ -344,3 +344,51 @@ async def test_a_renamed_season_sensor_is_still_obeyed(
     await _advance(hass, freezer, hours=7)
 
     assert hass.states.get("climate.bedroom").attributes["hvac_action"] == "idle"
+
+
+# --- what the recorder can keep ------------------------------------------
+
+
+async def test_the_outdoor_average_is_a_sensor_the_recorder_can_keep(
+    hass: HomeAssistant,
+):
+    """Statistics are kept forever for a number with a state_class, and never
+    for an attribute. The history page needs thirty days of this."""
+    hass.states.async_set("sensor.outdoor", "8.0")
+    await seasons(hass, outdoor_sensor="sensor.outdoor")
+    state = hass.states.get("sensor.outdoor_average")
+    assert state is not None
+    assert float(state.state) == 8.0
+    assert state.attributes["state_class"] == "measurement"
+    assert state.attributes["unit_of_measurement"] == "°C"
+
+
+async def test_the_outdoor_average_has_no_value_without_a_source(
+    hass: HomeAssistant,
+):
+    await seasons(hass)
+    assert hass.states.get("sensor.outdoor_average").state == "unknown"
+
+
+async def test_the_outdoor_average_follows_the_damped_value(
+    hass: HomeAssistant, freezer
+):
+    hass.states.async_set("sensor.outdoor", "8.0")
+    await seasons(hass, outdoor_sensor="sensor.outdoor", damping_hours=1.0)
+    hass.states.async_set("sensor.outdoor", "2.0")
+    await _advance(hass, freezer, hours=3)
+    damped = hass.states.get("binary_sensor.heating_season").attributes["damped"]
+    assert float(hass.states.get("sensor.outdoor_average").state) == damped
+
+
+async def test_heat_demand_is_also_a_number(hass: HomeAssistant):
+    """An hourly mean of a 0/1 series is the fraction of that hour the room
+    was heating, which is what the bars and the energy signature are made of."""
+    hass.states.async_set("sensor.bedroom_temperature", "17.0")
+    hass.states.async_set("switch.radiator", "off")
+    await seasons(hass)
+    await room(hass)
+    state = hass.states.get("sensor.bedroom_heat_demand")
+    assert state is not None
+    assert state.attributes["state_class"] == "measurement"
+    assert float(state.state) in (0.0, 1.0)

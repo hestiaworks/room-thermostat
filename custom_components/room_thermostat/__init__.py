@@ -24,7 +24,7 @@ from .store import RoomStore
 # room entry sets up nothing at all: it is waiting to be migrated, and
 # building its entities twice over would fight the migration for them.
 ROOM_PLATFORMS: list[Platform] = []
-HUB_PLATFORMS = [Platform.CLIMATE, Platform.BINARY_SENSOR]
+HUB_PLATFORMS = [Platform.CLIMATE, Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 def entry_type(entry: ConfigEntry) -> str:
