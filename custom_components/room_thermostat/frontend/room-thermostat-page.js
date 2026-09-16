@@ -416,6 +416,9 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .editor .field.invalid input, .editor .field.invalid select { border-color:var(--danger); }
 .editor .row { display:flex; gap:var(--s3); align-items:flex-end; }
 .editor .row .field { flex:1; min-width:0; }
+/* A number is a few characters wide; a field the width of the form invites
+   somebody to type a sentence into it. */
+.editor .row input[type=number] { width:8em; flex:none; }
 .editor .unit { color:var(--muted); font:400 13px/1 var(--font); padding-bottom:10px; }
 .editor .actions { display:flex; align-items:center; gap:var(--s3); margin-top:var(--s3);
   padding-top:var(--s4); border-top:1px solid var(--line); flex-wrap:wrap; }
@@ -699,6 +702,9 @@ class RoomThermostatPage extends HTMLElement {
         this.render();
       });
     });
+    root.querySelectorAll("[data-cancel]").forEach((button) => {
+      button.addEventListener("click", () => this.go("#rooms"));
+    });
     root.querySelectorAll("[data-delete]").forEach((button) => {
       button.addEventListener("click", () => this.deleteRoom());
     });
@@ -828,9 +834,60 @@ class RoomThermostatPage extends HTMLElement {
     });
   }
 
+  field(name, label, value, hint = "") {
+    const problem = this.problems[name];
+    return `<label class="field ${problem ? "invalid" : ""}">
+      <span>${escapeHtml(label)}</span>
+      <input name="${name}" value="${escapeHtml(value ?? "")}">
+      ${problem ? `<small class="problem">${escapeHtml(PROBLEMS[problem] || problem)}</small>` : ""}
+      ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
+    </label>`;
+  }
+
+  number(name, label, value, unit, hint = "") {
+    return `<label class="field">
+      <span>${escapeHtml(label)}</span>
+      <div class="row">
+        <input name="${name}" type="number" step="0.5" value="${escapeHtml(value ?? "")}">
+        <span class="unit">${escapeHtml(unit)}</span>
+      </div>
+      ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
+    </label>`;
+  }
+
   roomEditor() {
-    return `<div class="page-head"><h1>Room</h1></div>
-      <p class="muted">The editor arrives next.</p>`;
+    const draft = this.draft || {};
+    const isNew = !draft.id;
+    return `<div class="page-head">
+        <h1>${isNew ? "New room" : escapeHtml(draft.name || "Room")}</h1>
+        <p>A room is a temperature sensor and whatever heats or cools it.</p>
+      </div>
+      <form class="editor">
+        ${this.field("name", "Name", draft.name,
+          "What this room is called, here and in Home Assistant.")}
+        ${this.field("temperature_sensor", "Temperature sensor", draft.temperature_sensor,
+          "The reason this integration exists: the room is controlled against this, never against the air conditioner's own sensor.")}
+        ${this.field("humidity_sensor", "Humidity sensor", draft.humidity_sensor)}
+        ${this.field("cooler", "Air conditioner", draft.cooler,
+          "Any climate entity. Its fan, swing and preset lists are mirrored rather than replaced.")}
+        ${this.field("heaters", "Heaters", (draft.heaters || []).join(", "),
+          "Valves or switches, separated by commas. A radiator valve is a valve entity, not a switch.")}
+        <label class="field"><span>Cooling strategy</span>
+          <select name="cooling_strategy">
+            <option value="passthrough" ${draft.cooling_strategy !== "gated" ? "selected" : ""}>Pass the setpoint to the unit</option>
+            <option value="gated" ${draft.cooling_strategy === "gated" ? "selected" : ""}>Park the unit and gate it on the room's sensor</option>
+          </select>
+          <small>Gated is for a unit whose sensor reads its own recirculated air and stops while the room is still warm.</small>
+        </label>
+        ${this.number("frost_temperature", "Frost protection", draft.frost_temperature ?? 5, "°C",
+          "Heats whatever the mode, whatever the season. A thermostat switched off must not be able to freeze a pipe.")}
+        ${this.problems.base ? `<p class="problem">${escapeHtml(PROBLEMS[this.problems.base] || this.problems.base)}</p>` : ""}
+        <div class="actions">
+          <button class="primary" type="submit" ${this.busy ? "disabled" : ""}>${isNew ? "Add room" : "Save room"}</button>
+          <button type="button" data-cancel>Cancel</button>
+          ${isNew ? "" : `<button type="button" class="danger" data-delete>Delete room</button>`}
+        </div>
+      </form>`;
   }
 
   houseTab() {
@@ -845,11 +902,73 @@ class RoomThermostatPage extends HTMLElement {
 
   async loadHistory() {}
 
-  async saveRoom() {}
+  /** The draft as the record wants it: lists as lists, numbers as numbers. */
+  roomPayload() {
+    const draft = { ...this.draft };
+    draft.heaters = String(draft.heaters ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    for (const key of ["humidity_sensor", "cooler"]) {
+      if (draft[key] === "") draft[key] = null;
+    }
+    if (draft.frost_temperature !== undefined) {
+      draft.frost_temperature = Number(draft.frost_temperature);
+    }
+    return draft;
+  }
+
+  async saveRoom() {
+    this.busy = true;
+    this.problems = {};
+    this.render();
+    const payload = this.roomPayload();
+    try {
+      if (payload.id) {
+        await this.call({
+          type: "room_thermostat/rooms/update",
+          room_id: payload.id,
+          room: payload,
+        });
+      } else {
+        await this.call({ type: "room_thermostat/rooms/create", room: payload });
+      }
+      this.busy = false;
+      await this.load();
+      this.go("#rooms");
+    } catch (err) {
+      // The server names the field; the page puts the message beside it.
+      this.problems = err?.problems || err?.error?.problems || {};
+      if (!Object.keys(this.problems).length) {
+        this.error = err?.message || "Could not save that room";
+      }
+      this.busy = false;
+      this.render();
+    }
+  }
+
+  async deleteRoom() {
+    const name = this.draft?.name || "this room";
+    // Irreversible, and it takes the device and the entities with it.
+    if (!window.confirm(`Delete ${name}? Its thermostat, its sensors and its device go with it.`)) return;
+    this.busy = true;
+    this.render();
+    try {
+      await this.call({
+        type: "room_thermostat/rooms/delete",
+        room_id: this.draft.id,
+      });
+      this.busy = false;
+      await this.load();
+      this.go("#rooms");
+    } catch (err) {
+      this.error = err?.message || "Could not delete that room";
+      this.busy = false;
+      this.render();
+    }
+  }
 
   async saveHouse() {}
-
-  async deleteRoom() {}
 
   take(field) {
     if (!field?.name) return;

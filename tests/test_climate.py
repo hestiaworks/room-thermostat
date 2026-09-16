@@ -699,3 +699,18 @@ async def test_a_rooms_entity_ids_are_predictable(hass: HomeAssistant):
     assert hass.states.get("climate.bedroom") is not None
     assert hass.states.get("binary_sensor.bedroom_heat_demand") is not None
     assert hass.states.get("climate.bedroom").attributes["friendly_name"] == "Bedroom"
+
+
+async def test_a_thermostat_says_which_room_it_is(hass: HomeAssistant):
+    """The page joins a card to its room by this. Matching on the friendly
+    name breaks the moment two rooms are named alike."""
+    hass.states.async_set("sensor.bedroom_temperature", "21.0")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["switch.radiator"],
+        },
+    )
+    room_id = hass.data[DOMAIN]["store"].rooms[0].id
+    assert hass.states.get("climate.bedroom").attributes["room_id"] == room_id

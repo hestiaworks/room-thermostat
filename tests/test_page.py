@@ -118,3 +118,35 @@ def test_mode_and_setpoint_are_commands_rather_than_settings(source: str):
 
 def test_a_room_with_no_reading_says_so_rather_than_drawing_nothing(source: str):
     assert "No reading" in source
+
+
+# --- the editor ----------------------------------------------------------
+
+
+def test_the_editor_edits_a_draft_rather_than_the_record(source: str):
+    """Typing into the record would save half a room on every keystroke."""
+    assert "this.draft" in source
+
+
+def test_typing_does_not_redraw_the_form(source: str):
+    """A redraw on every keystroke puts the caret at the end of the field."""
+    take = source[source.index("  take(field) {") : source.index("/*\n * Home Assistant")]
+    assert "this.render()" not in take
+
+
+def test_a_refused_save_shows_the_problem_beside_the_field(source: str):
+    assert "this.problems[name]" in source
+    assert "PROBLEMS[problem]" in source
+
+
+def test_every_refusal_the_server_can_send_has_words_here(source: str):
+    """A code the page cannot translate reaches somebody as "own_entity"."""
+    for code in ("required", "own_entity", "no_devices"):
+        assert f"  {code}:" in source
+
+
+def test_deleting_a_room_is_confirmed_and_names_what_goes(source: str):
+    """It takes the room, its device and its entities. A misclick that does
+    that silently is not acceptable."""
+    assert "window.confirm(" in source
+    assert "its device go with it" in source

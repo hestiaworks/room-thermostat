@@ -319,6 +319,8 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
             "cooler": self._cooler,
             "heaters": self._heaters,
             "inverted_heaters": sorted(self._inverted),
+            # The page joins a card to its room by this rather than by name.
+            "room_id": self._room_id,
             "heat_demand": self._demand,
             "frost_protection": self._frost,
             "unavailable_devices": missing,
