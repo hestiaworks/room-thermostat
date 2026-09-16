@@ -15,6 +15,7 @@ fires on the switch is pushing water into a circuit that has not opened yet.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -35,6 +36,7 @@ from homeassistant.util.unit_conversion import TemperatureConverter
 
 from . import entry_type
 from .control import damp, in_season, settled
+from .model import House
 from .store import RoomStore
 from .const import (
     CONF_COOL_LIMIT,
@@ -46,7 +48,6 @@ from .const import (
     CONF_SEASON_DWELL,
     DOMAIN,
     ENTRY_HUB,
-    ENTRY_SEASONS,
     OUTDOOR_LOST_SECONDS,
     SANE_OUTDOOR,
     SIGNAL_DEMAND,
@@ -61,11 +62,9 @@ TICK = timedelta(seconds=30)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    if entry_type(entry) == ENTRY_SEASONS:
-        async_add_entities([HeatingSeason(entry), CoolingSeason(entry)])
-        return
     if entry_type(entry) != ENTRY_HUB:
         return
+    async_add_entities([HeatingSeason(entry), CoolingSeason(entry)])
 
     store: RoomStore = hass.data[DOMAIN]["store"]
     known: dict[str, HeatDemand] = {}
@@ -169,6 +168,7 @@ class _Season(BinarySensorEntity):
         self._attr_name = self.label
         self._attr_is_on = True
         self._outdoor: float | None = None
+        self._watching: Callable[[], None] | None = None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
@@ -176,12 +176,13 @@ class _Season(BinarySensorEntity):
         )
 
     @property
-    def _options(self) -> dict[str, Any]:
-        return self._entry.options
+    def _house(self) -> House:
+        """The house's settings, read from the record rather than held."""
+        return self.hass.data[DOMAIN]["store"].house
 
     @property
     def _source(self) -> str | None:
-        return self._options.get(CONF_OUTDOOR_SENSOR)
+        return self._house.outdoor_sensor
 
     def _decide(self, reading: float | None) -> None:
         raise NotImplementedError
@@ -193,22 +194,47 @@ class _Season(BinarySensorEntity):
         await super().async_added_to_hass()
         await self._restore()
 
-        @callback
-        def _changed(_: Event) -> None:
-            self._update()
-
         # Both have to be callbacks: an undecorated function is run in an
         # executor thread, and writing entity state from one is a data race.
         @callback
         def _ticked(_now) -> None:
             self._update()
 
-        if self._source:
-            self.async_on_remove(
-                async_track_state_change_event(self.hass, [self._source], _changed)
-            )
+        @callback
+        def _house_changed() -> None:
+            """The outdoor source can be chosen and cleared on the page now,
+            with no entry reloading around us, so the subscription has to
+            follow it."""
+            self._resubscribe()
+            self._update()
+
+        self._resubscribe()
+        self.async_on_remove(lambda: self._unwatch())
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, SIGNAL_ROOMS, _house_changed)
+        )
         self.async_on_remove(async_track_time_interval(self.hass, _ticked, TICK))
         self._update()
+
+    @callback
+    def _unwatch(self) -> None:
+        if self._watching is not None:
+            self._watching()
+            self._watching = None
+
+    @callback
+    def _resubscribe(self) -> None:
+        self._unwatch()
+        if not self._source:
+            return
+
+        @callback
+        def _changed(_: Event) -> None:
+            self._update()
+
+        self._watching = async_track_state_change_event(
+            self.hass, [self._source], _changed
+        )
 
     @callback
     def _update(self) -> None:
@@ -248,10 +274,10 @@ class HeatingSeason(_Season, RestoreEntity):
         return {
             "outdoor": self._outdoor,
             "damped": None if self._damped is None else round(self._damped, 2),
-            "limit": self._options[CONF_HEAT_LIMIT],
-            "hysteresis": self._options[CONF_HEAT_LIMIT_HYSTERESIS],
-            "averaging_hours": self._options[CONF_DAMPING_HOURS],
-            "dwell_hours": self._options[CONF_SEASON_DWELL],
+            "limit": self._house.heat_limit,
+            "hysteresis": self._house.heat_limit_hysteresis,
+            "averaging_hours": self._house.damping_hours,
+            "dwell_hours": self._house.season_dwell_hours,
         }
 
     def _decide(self, reading: float | None) -> None:
@@ -269,13 +295,13 @@ class HeatingSeason(_Season, RestoreEntity):
         elapsed = 0.0 if self._last is None else now - self._last
         self._last = now
         self._damped = damp(
-            self._damped, reading, elapsed, self._options[CONF_DAMPING_HOURS] * 3600.0
+            self._damped, reading, elapsed, self._house.damping_hours * 3600.0
         )
         candidate = in_season(
             self._attr_is_on,
             self._damped,
-            self._options[CONF_HEAT_LIMIT],
-            self._options[CONF_HEAT_LIMIT_HYSTERESIS],
+            self._house.heat_limit,
+            self._house.heat_limit_hysteresis,
             rising=False,
         )
         self._attr_is_on, self._pending_since = settled(
@@ -283,7 +309,7 @@ class HeatingSeason(_Season, RestoreEntity):
             candidate,
             self._pending_since,
             now,
-            self._options[CONF_SEASON_DWELL] * 3600.0,
+            self._house.season_dwell_hours * 3600.0,
         )
 
     def _report_lost(self, now: float | None) -> None:
@@ -324,8 +350,8 @@ class CoolingSeason(_Season):
     def extra_state_attributes(self) -> dict[str, Any]:
         return {
             "outdoor": self._outdoor,
-            "limit": self._options[CONF_COOL_LIMIT],
-            "hysteresis": self._options[CONF_COOL_LIMIT_HYSTERESIS],
+            "limit": self._house.cool_limit,
+            "hysteresis": self._house.cool_limit_hysteresis,
         }
 
     def _decide(self, reading: float | None) -> None:
@@ -336,7 +362,7 @@ class CoolingSeason(_Season):
         self._attr_is_on = in_season(
             self._attr_is_on,
             reading,
-            self._options[CONF_COOL_LIMIT],
-            self._options[CONF_COOL_LIMIT_HYSTERESIS],
+            self._house.cool_limit,
+            self._house.cool_limit_hysteresis,
             rising=True,
         )

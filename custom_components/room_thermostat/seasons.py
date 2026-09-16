@@ -18,21 +18,29 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
-    CONF_COOL_OVERRIDE,
     CONF_ENTRY_TYPE,
-    CONF_HEAT_OVERRIDE,
     DEFAULT_SEASON_OVERRIDE,
     DOMAIN,
-    ENTRY_SEASONS,
+    ENTRY_HUB,
 )
+from .model import House
 
 
 def seasons_entry(hass: HomeAssistant) -> ConfigEntry | None:
-    """The one house-level entry, or None before it has been created."""
+    """The hub, or None before it has been created.
+
+    The house's settings used to live in an entry of their own, conjured into
+    being because there was nowhere else to put them. There is somewhere now.
+    """
     for entry in hass.config_entries.async_entries(DOMAIN):
-        if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_SEASONS:
+        if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_HUB:
             return entry
     return None
+
+
+def house(hass: HomeAssistant) -> House | None:
+    store = hass.data.get(DOMAIN, {}).get("store")
+    return None if store is None else store.house
 
 
 def season_entity_ids(hass: HomeAssistant) -> tuple[str | None, str | None]:
@@ -73,10 +81,7 @@ def allowed(hass: HomeAssistant) -> tuple[bool, bool]:
 
 def overrides(hass: HomeAssistant) -> tuple[float, float]:
     """How far from setpoint a room may stray, out of season, before it runs."""
-    entry = seasons_entry(hass)
-    if entry is None:
+    settings = house(hass)
+    if settings is None:
         return DEFAULT_SEASON_OVERRIDE, DEFAULT_SEASON_OVERRIDE
-    return (
-        entry.options.get(CONF_HEAT_OVERRIDE, DEFAULT_SEASON_OVERRIDE),
-        entry.options.get(CONF_COOL_OVERRIDE, DEFAULT_SEASON_OVERRIDE),
-    )
+    return settings.heat_override, settings.cool_override

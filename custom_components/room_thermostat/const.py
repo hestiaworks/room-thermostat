@@ -7,7 +7,6 @@ DOMAIN = "room_thermostat"
 CONF_ENTRY_TYPE = "entry_type"
 ENTRY_ROOM = "room"
 ENTRY_HUB = "hub"
-ENTRY_SEASONS = "seasons"
 
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"

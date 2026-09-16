@@ -15,7 +15,6 @@ from .const import (
     DOMAIN,
     ENTRY_HUB,
     ENTRY_ROOM,
-    ENTRY_SEASONS,
 )
 from .page import async_register_page, async_setup_page_assets, async_unregister_page
 from .store import RoomStore
@@ -24,7 +23,6 @@ from .store import RoomStore
 # room entry sets up nothing at all: it is waiting to be migrated, and
 # building its entities twice over would fight the migration for them.
 ROOM_PLATFORMS: list[Platform] = []
-SEASONS_PLATFORMS = [Platform.BINARY_SENSOR]
 HUB_PLATFORMS = [Platform.CLIMATE, Platform.BINARY_SENSOR]
 
 
@@ -40,8 +38,6 @@ def platforms(entry: ConfigEntry) -> list[Platform]:
     kind = entry_type(entry)
     if kind == ENTRY_HUB:
         return HUB_PLATFORMS
-    if kind == ENTRY_SEASONS:
-        return SEASONS_PLATFORMS
     return ROOM_PLATFORMS
 
 
@@ -67,12 +63,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Editing the options changes the control loop's parameters, and the
     # simplest correct response is to rebuild the entities around them.
     entry.async_on_unload(entry.add_update_listener(_reload))
-    if entry_type(entry) == ENTRY_ROOM:
-        _ask_for_seasons(hass)
-    else:
-        # Rooms subscribe to the two sensors by entity id, so a house that has
-        # just gained them has to look again.
-        _reload_rooms(hass)
     return True
 
 
@@ -86,7 +76,10 @@ def _prune_devices(hass: HomeAssistant, hub: ConfigEntry) -> None:
     registry itself.
     """
     store: RoomStore = hass.data[DOMAIN]["store"]
-    wanted = {room.id for room in store.rooms}
+    # The hub's own device carries the season sensors and is identified by the
+    # hub rather than by a room, so it is always wanted. Leaving it out took
+    # the seasons away the first time the house was edited.
+    wanted = {room.id for room in store.rooms} | {hub.entry_id}
     registry = dr.async_get(hass)
     for device in dr.async_entries_for_config_entry(registry, hub.entry_id):
         ours = {
@@ -98,37 +91,6 @@ def _prune_devices(hass: HomeAssistant, hub: ConfigEntry) -> None:
             registry.async_update_device(
                 device.id, remove_config_entry_id=hub.entry_id
             )
-
-
-@callback
-def _ask_for_seasons(hass: HomeAssistant) -> None:
-    """Bring the one Seasons entry into being if it is not there.
-
-    It is never offered in the helper flow, so this is the only way it comes to
-    exist — and the reason a deleted one returns at the next startup. Deleting
-    it is not how seasons are switched off; clearing its outdoor source is, and
-    that leaves the row in place to be pointed at a sensor again later.
-
-    The flag stops two rooms setting up at once from starting two flows. The
-    flow checks again for itself, because the flag does not survive a reload.
-    """
-    store = hass.data.setdefault(DOMAIN, {})
-    if store.get("seasons_requested"):
-        return
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_SEASONS:
-            return
-    store["seasons_requested"] = True
-    hass.async_create_task(
-        hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_IMPORT})
-    )
-
-
-@callback
-def _reload_rooms(hass: HomeAssistant) -> None:
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        if entry_type(entry) == ENTRY_ROOM and entry.state.recoverable:
-            hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))
 
 
 async def _reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -147,9 +109,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unloaded
 
 
-async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """A room that has lost its seasons must stop obeying them."""
-    if entry_type(entry) != ENTRY_SEASONS:
-        return
-    hass.data.setdefault(DOMAIN, {})["seasons_requested"] = False
-    _reload_rooms(hass)

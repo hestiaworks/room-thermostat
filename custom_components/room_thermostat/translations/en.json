@@ -111,29 +111,6 @@
             }
           }
         }
-      },
-      "seasons": {
-        "title": "Seasons",
-        "description": "Decided once for the whole house, from an outdoor temperature. Rooms obey this; they have no seasonal settings of their own. Leave the source empty and nothing is held back at all.",
-        "data": {
-          "outdoor_sensor": "Outdoor temperature",
-          "damping_hours": "Averaging time",
-          "season_dwell_hours": "How long a change must last",
-          "heat_limit": "Heating stops above",
-          "heat_limit_hysteresis": "Heating restarts this far below",
-          "cool_limit": "Cooling stops below",
-          "cool_limit_hysteresis": "Cooling restarts this far above",
-          "heat_override": "Heat anyway this far below setpoint",
-          "cool_override": "Cool anyway this far above setpoint"
-        },
-        "data_description": {
-          "outdoor_sensor": "A sensor or a weather entity. Place a sensor in shade: one in afternoon sun reads far too warm and would hold the heating off on a cold day.",
-          "damping_hours": "The heating decision follows an average rather than the reading, so one warm afternoon does not end the heating season. Longer suits a heavy masonry house.",
-          "season_dwell_hours": "A mild autumn dips below the heating limit for a few hours every night. Nothing changes until it has lasted this long.",
-          "heat_limit": "The outdoor average above which the house heats itself — sun, cooking, bodies. Around 16 for an insulated house, higher for an old one.",
-          "cool_limit": "Judged on the live reading, not the average: a sunny afternoon in a cold week still overheats a room.",
-          "heat_override": "The weather is a guess and the room's own thermometer is not. Keep this well below your setpoint, or it will heat on the evenings this setting exists to prevent."
-        }
       }
     },
     "error": {

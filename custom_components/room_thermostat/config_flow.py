@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
+from homeassistant.config_entries import ConfigFlow
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult, section
 from homeassistant.core import HomeAssistant
@@ -64,7 +64,6 @@ from .const import (
     DEFAULT_VALVE_TRAVEL,
     DOMAIN,
     ENTRY_HUB,
-    ENTRY_SEASONS,
     STRATEGY_GATED,
     STRATEGY_PASSTHROUGH,
 )
@@ -297,86 +296,6 @@ def default_options() -> dict[str, Any]:
     }
 
 
-OUTDOOR_SELECTOR = selector.EntitySelector(
-    selector.EntitySelectorConfig(
-        # A weather entity is as good as a sensor for an average measured in
-        # days, and an input_number is how the behaviour gets exercised without
-        # waiting for a season.
-        filter=[
-            selector.EntityFilterSelectorConfig(
-                domain="sensor", device_class="temperature"
-            ),
-            selector.EntityFilterSelectorConfig(
-                domain=["weather", "input_number", "number"]
-            ),
-        ]
-    )
-)
-
-
-def season_options() -> dict[str, Any]:
-    """What the Seasons entry holds when the integration creates it.
-
-    No outdoor source, so it gates nothing until someone chooses one. An
-    existing house gains a row and no behaviour change at all.
-    """
-    return {
-        CONF_OUTDOOR_SENSOR: None,
-        CONF_DAMPING_HOURS: DEFAULT_DAMPING_HOURS,
-        CONF_SEASON_DWELL: DEFAULT_SEASON_DWELL_HOURS,
-        CONF_HEAT_LIMIT: DEFAULT_HEAT_LIMIT,
-        CONF_HEAT_LIMIT_HYSTERESIS: DEFAULT_LIMIT_HYSTERESIS,
-        CONF_COOL_LIMIT: DEFAULT_COOL_LIMIT,
-        CONF_COOL_LIMIT_HYSTERESIS: DEFAULT_LIMIT_HYSTERESIS,
-        CONF_HEAT_OVERRIDE: DEFAULT_SEASON_OVERRIDE,
-        CONF_COOL_OVERRIDE: DEFAULT_SEASON_OVERRIDE,
-    }
-
-
-def _hours(maximum: float) -> Any:
-    return selector.NumberSelector(
-        selector.NumberSelectorConfig(
-            min=0, max=maximum, step=1,
-            unit_of_measurement="hours", mode=selector.NumberSelectorMode.BOX,
-        )
-    )
-
-
-def seasons_schema(current: dict[str, Any]) -> vol.Schema:
-    """Everything the house decides once, on one form."""
-    return vol.Schema(
-        {
-            vol.Optional(CONF_OUTDOOR_SENSOR): OUTDOOR_SELECTOR,
-            vol.Required(
-                CONF_DAMPING_HOURS, default=current[CONF_DAMPING_HOURS]
-            ): _hours(48),
-            vol.Required(
-                CONF_SEASON_DWELL, default=current[CONF_SEASON_DWELL]
-            ): _hours(72),
-            vol.Required(
-                CONF_HEAT_LIMIT, default=current[CONF_HEAT_LIMIT]
-            ): _degrees(0, 30),
-            vol.Required(
-                CONF_HEAT_LIMIT_HYSTERESIS,
-                default=current[CONF_HEAT_LIMIT_HYSTERESIS],
-            ): _degrees(0, 5),
-            vol.Required(
-                CONF_COOL_LIMIT, default=current[CONF_COOL_LIMIT]
-            ): _degrees(0, 30),
-            vol.Required(
-                CONF_COOL_LIMIT_HYSTERESIS,
-                default=current[CONF_COOL_LIMIT_HYSTERESIS],
-            ): _degrees(0, 5),
-            vol.Required(
-                CONF_HEAT_OVERRIDE, default=current[CONF_HEAT_OVERRIDE]
-            ): _degrees(0, 15),
-            vol.Required(
-                CONF_COOL_OVERRIDE, default=current[CONF_COOL_OVERRIDE]
-            ): _degrees(0, 15),
-        }
-    )
-
-
 SOURCE_KEYS = (
     CONF_TEMPERATURE_SENSOR,
     CONF_HUMIDITY_SENSOR,
@@ -441,25 +360,6 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
             title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
         )
 
-    async def async_step_import(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Create the one Seasons entry.
-
-        Reachable only from code. A house-level setting offered next to a
-        per-room one invites the reading that you make one per room, and a
-        singleton guarded only by an abort still advertises itself as something
-        to create. A row that cannot be created cannot be created twice.
-        """
-        for entry in self.hass.config_entries.async_entries(DOMAIN):
-            if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_SEASONS:
-                return self.async_abort(reason="single_instance_allowed")
-        return self.async_create_entry(
-            title="Seasons",
-            data={CONF_ENTRY_TYPE: ENTRY_SEASONS},
-            options=season_options(),
-        )
-
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -484,97 +384,4 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
                 ROOM_SCHEMA, user_input or entry.data
             ),
             errors=errors,
-        )
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(entry: ConfigEntry) -> OptionsFlow:
-        if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_SEASONS:
-            return SeasonsOptionsFlow()
-        return RoomThermostatOptionsFlow()
-
-
-class RoomThermostatOptionsFlow(OptionsFlow):
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        errors: dict[str, str] = {}
-        flat: dict[str, Any] | None = None
-        if user_input is not None:
-            flat = {
-                key: value
-                for group in user_input.values()
-                for key, value in group.items()
-            }
-            # Every source key is written, including the ones left empty, so
-            # clearing a device clears it rather than falling back to what the
-            # room used before.
-            flat.update({key: flat.get(key) for key in SOURCE_KEYS})
-            # The inversion ticks list the room's own heaters, so a tick for a
-            # heater that has just been removed is the removal seen from the
-            # other side, not a mistake to report. It goes with the heater.
-            flat[CONF_INVERTED_HEATERS] = [
-                heater
-                for heater in (flat.get(CONF_INVERTED_HEATERS) or [])
-                if heater in (flat.get(CONF_HEATERS) or [])
-            ]
-            errors = _problems(self.hass, flat)
-            if not errors:
-                return self.async_create_entry(
-                    data={**self.config_entry.options, **flat}
-                )
-
-        # A refused form comes back as it was filled in. Redrawing it from the
-        # stored configuration threw the edit away, and the field someone had
-        # just cleared reappeared with its old value — which reads as the form
-        # ignoring them rather than as a refusal.
-        chosen = {key: flat[key] for key in SOURCE_KEYS} if flat else sources(self.config_entry)
-        current = {**default_options(), **self.config_entry.options}
-        suggested = user_input if user_input is not None else {
-            "sensors": {k: v for k, v in chosen.items() if v and "sensor" in k},
-            "devices": {
-                k: v
-                for k, v in chosen.items()
-                if v and k in (CONF_COOLER, CONF_HEATERS, CONF_INVERTED_HEATERS)
-            },
-        }
-        return self.async_show_form(
-            step_id="init",
-            data_schema=self.add_suggested_values_to_schema(
-                room_schema(self.hass, current, chosen), suggested
-            ),
-            errors=errors,
-        )
-
-
-class SeasonsOptionsFlow(OptionsFlow):
-    """The house's own settings. There is exactly one of these."""
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        # Its own step id, not the room form's: they would otherwise share a
-        # title, and this form is not about a room.
-        return await self.async_step_seasons(user_input)
-
-    async def async_step_seasons(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        if user_input is not None:
-            # The source is written even when it is absent, so clearing it
-            # clears it rather than falling back to the previous choice —
-            # clearing the source is how seasons are switched off.
-            return self.async_create_entry(
-                data={
-                    **season_options(),
-                    **user_input,
-                    CONF_OUTDOOR_SENSOR: user_input.get(CONF_OUTDOOR_SENSOR),
-                }
-            )
-        current = {**season_options(), **self.config_entry.options}
-        return self.async_show_form(
-            step_id="seasons",
-            data_schema=self.add_suggested_values_to_schema(
-                seasons_schema(current), current
-            ),
         )
