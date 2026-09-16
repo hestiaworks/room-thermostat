@@ -409,6 +409,11 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 /* 9 ── EDITOR ─────────────────────────────────────────────── */
 
 .editor { max-width:720px; display:flex; flex-direction:column; gap:var(--s4); }
+/* A band label names the group beneath it and separates it from the one
+   above with a rule, which is how this design separates anything. */
+.band-label { font:500 12px/1 var(--font); letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); padding-top:var(--s4); border-top:1px solid var(--line); }
+.editor > .band-label:first-child { padding-top:0; border-top:0; }
 .editor .field { display:flex; flex-direction:column; gap:var(--s2); }
 .editor .field > span { font:500 14px/1 var(--font); }
 .editor .field small { color:var(--muted); font:400 12px/1.5 var(--font); }
@@ -702,6 +707,12 @@ class RoomThermostatPage extends HTMLElement {
         this.render();
       });
     });
+    root.querySelectorAll("[data-revert]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.draftHouse = null;
+        this.render();
+      });
+    });
     root.querySelectorAll("[data-cancel]").forEach((button) => {
       button.addEventListener("click", () => this.go("#rooms"));
     });
@@ -890,9 +901,87 @@ class RoomThermostatPage extends HTMLElement {
       </form>`;
   }
 
+  /** The heating season sensor, which is the only thing that knows the average. */
+  seasonSensor() {
+    return Object.values(this._hass?.states || {}).find(
+      (state) =>
+        state.entity_id?.startsWith("binary_sensor.") &&
+        state.attributes?.damped !== undefined,
+    ) || null;
+  }
+
+  /**
+   * What the numbers on this page currently mean, in a sentence.
+   *
+   * A threshold whose far side you cannot see is what went wrong with bright
+   * and dark on the panel: the setting was right and nobody could tell.
+   */
+  seasonExplainer() {
+    const house = this.draftHouse || this.house;
+    if (!house.outdoor_sensor) {
+      return `<div class="foot">No outdoor temperature is set, so nothing is held
+        back: every room heats and cools exactly as it would have before.</div>`;
+    }
+    const sensor = this.seasonSensor();
+    const damped = sensor ? Number(sensor.attributes.damped) : null;
+    if (damped === null || Number.isNaN(damped)) {
+      return `<div class="foot">Waiting for a first reading from
+        <strong>${escapeHtml(house.outdoor_sensor)}</strong>. Until one arrives
+        nothing is held back.</div>`;
+    }
+    const limit = Number(house.heat_limit);
+    const hysteresis = Number(house.heat_limit_hysteresis);
+    const inSeason = sensor.state === "on";
+    const next = inSeason
+      ? `Heating is <strong>in season</strong>, and leaves once the average passes
+         ${(limit + hysteresis).toFixed(1)} °C.`
+      : `Heating is <strong>out of season</strong>, so a room below its setpoint stays
+         idle. It comes back once the average falls below ${limit.toFixed(1)} °C.`;
+    return `<div class="foot">The outdoor average is
+      <strong>${damped.toFixed(1)} °C</strong> against a limit of ${limit.toFixed(1)}.
+      ${next} A change has to last ${house.season_dwell_hours} hours — the dwell —
+      before it counts, because a mild autumn dips below the limit for a few hours
+      every night.</div>`;
+  }
+
   houseTab() {
-    return `<div class="page-head"><h1>House</h1></div>
-      <p class="muted">The seasons arrive next.</p>`;
+    const house = this.draftHouse || this.house;
+    const dirty = this.draftHouse !== null;
+    return `<div class="page-head">
+        <h1>House</h1>
+        <p>Decided once for the whole house, from an outdoor temperature. Rooms
+        obey this; they have no seasonal settings of their own.</p>
+      </div>
+      <form class="editor house">
+        <div class="band-label">Outdoor</div>
+        ${this.field("outdoor_sensor", "Outdoor temperature", house.outdoor_sensor,
+          "A sensor or a weather entity. Put a sensor in shade: one in afternoon sun reads far too warm and would hold the heating off on a cold day. Leave it empty and nothing is held back at all.")}
+        ${this.seasonExplainer()}
+
+        <div class="band-label">Heating season</div>
+        ${this.number("heat_limit", "Heating stops above", house.heat_limit, "°C",
+          "The outdoor average above which the house heats itself — sun, cooking, bodies. Around 16 for an insulated house, higher for an old one.")}
+        ${this.number("heat_limit_hysteresis", "Heating restarts this far below", house.heat_limit_hysteresis, "K")}
+        ${this.number("damping_hours", "Averaging time", house.damping_hours, "hours",
+          "The heating decision follows an average rather than the reading, so one warm afternoon does not end the season. Longer suits a heavy masonry house.")}
+        ${this.number("season_dwell_hours", "A change must last", house.season_dwell_hours, "hours",
+          "A mild autumn dips below the limit for a few hours every night. Nothing changes until it has lasted this long.")}
+
+        <div class="band-label">Cooling season</div>
+        ${this.number("cool_limit", "Cooling stops below", house.cool_limit, "°C",
+          "Judged on the live reading rather than the average: a sunny afternoon in an otherwise cold week still overheats a room that afternoon.")}
+        ${this.number("cool_limit_hysteresis", "Cooling restarts this far above", house.cool_limit_hysteresis, "K")}
+
+        <div class="band-label">When the weather is wrong</div>
+        ${this.number("heat_override", "Heat anyway this far below setpoint", house.heat_override, "K",
+          "The weather is a guess and the room's own thermometer is not. Keep this well below your setpoint, or it will heat on the very evenings the limit exists to prevent.")}
+        ${this.number("cool_override", "Cool anyway this far above setpoint", house.cool_override, "K")}
+
+        <div class="actions">
+          <button class="primary" type="submit" ${this.busy || !dirty ? "disabled" : ""}>Save the house</button>
+          ${dirty ? `<button type="button" data-revert>Revert</button>` : `<span class="save-state">No unsaved changes</span>`}
+        </div>
+      </form>`;
   }
 
   historyTab() {
@@ -968,7 +1057,36 @@ class RoomThermostatPage extends HTMLElement {
     }
   }
 
-  async saveHouse() {}
+  /** The draft as the record wants it: numbers as numbers, an empty source
+   *  as null, because clearing it is how seasons are switched off. */
+  housePayload() {
+    const draft = { ...(this.draftHouse || {}) };
+    if (draft.outdoor_sensor !== undefined && !String(draft.outdoor_sensor).trim()) {
+      draft.outdoor_sensor = null;
+    }
+    for (const key of Object.keys(draft)) {
+      if (key !== "outdoor_sensor" && draft[key] !== null) draft[key] = Number(draft[key]);
+    }
+    return draft;
+  }
+
+  async saveHouse() {
+    this.busy = true;
+    this.render();
+    try {
+      await this.call({
+        type: "room_thermostat/house/update",
+        house: this.housePayload(),
+      });
+      this.draftHouse = null;
+      this.busy = false;
+      await this.load();
+    } catch (err) {
+      this.error = err?.message || "Could not save the house";
+      this.busy = false;
+      this.render();
+    }
+  }
 
   take(field) {
     if (!field?.name) return;

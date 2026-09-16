@@ -150,3 +150,32 @@ def test_deleting_a_room_is_confirmed_and_names_what_goes(source: str):
     that silently is not acceptable."""
     assert "window.confirm(" in source
     assert "its device go with it" in source
+
+
+# --- the house tab -------------------------------------------------------
+
+
+def test_the_house_tab_explains_what_the_numbers_currently_mean(source: str):
+    """A threshold whose far side you cannot see is what went wrong with
+    bright and dark on the panel: the setting was right and nobody could
+    tell."""
+    assert "out of season" in source
+    assert "damped" in source
+    assert "The outdoor average is" in source
+
+
+def test_the_dwell_is_explained_rather_than_only_labelled(source: str):
+    """Six hours of nothing happening looks broken unless it is named."""
+    assert "the dwell" in source
+    assert "dips below the limit for a few hours" in source
+
+
+def test_an_empty_outdoor_source_saves_as_null(source: str):
+    """Clearing it is how seasons are switched off, so the empty string must
+    not be written where a null belongs."""
+    payload = source[source.index("housePayload()") : source.index("async saveHouse()")]
+    assert "= null" in payload
+
+
+def test_the_house_says_when_it_has_nothing_to_hold_back(source: str):
+    assert "nothing is held back" in source
