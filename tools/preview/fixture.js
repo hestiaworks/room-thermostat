@@ -62,7 +62,28 @@ const climate = (entityId, name, roomId, extra) => [entityId, {
   },
 }];
 
+/** A few of the house's own entities, so the pickers have something to find. */
+const SOURCES = [
+  ["sensor.living_room_temp", "Living Room Temp", { device_class: "temperature", unit_of_measurement: "°C" }, "21.4"],
+  ["sensor.living_room_humidity", "Living Room Humidity", { device_class: "humidity" }, "48"],
+  ["sensor.bedroom_temp", "Bedroom Temp", { device_class: "temperature" }, "19.8"],
+  ["sensor.bedroom_humidity", "Bedroom Humidity", { device_class: "humidity" }, "52"],
+  ["sensor.office_temp", "Office Temp", { device_class: "temperature" }, "22.1"],
+  ["sensor.hall_temp", "Hall Temp", { device_class: "temperature" }, "20.2"],
+  ["climate.living_room_ac", "Living Room AC", {}, "cool"],
+  ["climate.bedroom_ac", "Bedroom AC", {}, "off"],
+  ["climate.office_ac", "Office AC", {}, "cool"],
+  ["valve.bedroom", "Bedroom Radiator", {}, "closed"],
+  ["valve.office", "Office Radiator", {}, "open"],
+  ["switch.hall_floor", "Hall Floor Loop", {}, "off"],
+  ["weather.forecast_home", "Forecast Home", { temperature: 19.4, temperature_unit: "°C" }, "cloudy"],
+];
+
 export const STATES = Object.fromEntries([
+  ...SOURCES.map(([entityId, name, attributes, state]) => [entityId, {
+    entity_id: entityId, state,
+    attributes: { friendly_name: name, ...attributes },
+  }]),
   climate("climate.living_room_thermostat", "Living Room", "living-room", {
     mode: "heat", temperature: 21.4, humidity: 48, target: 22,
     action: "idle", heatingSeason: false,

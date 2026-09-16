@@ -141,18 +141,34 @@ def hourly_by_day(points: list[tuple[float, float]]) -> dict[str, list[float]]:
     return days
 
 
-def _number(value: Any) -> float | None:
-    """A state as a number, or None.
+def reading_of(state: Any) -> float | None:
+    """A recorded state as a number, or None if it is not one.
 
     'on' counts as one and 'off' as zero, so a binary sensor and its numeric
     twin bucket the same way.
+
+    A weather entity keeps its temperature in an attribute — its state is a
+    word like "cloudy" — and either kind may report Fahrenheit. Reading the
+    state alone is why the outdoor line was missing from a house whose source
+    is a weather entity.
     """
-    if value in ("on", "off"):
-        return 1.0 if value == "on" else 0.0
+    entity_id = getattr(state, "entity_id", "") or ""
+    attributes = getattr(state, "attributes", None) or {}
+    if entity_id.startswith("weather."):
+        raw = attributes.get("temperature")
+        unit = attributes.get("temperature_unit", "°C")
+    else:
+        raw = getattr(state, "state", None)
+        unit = attributes.get("unit_of_measurement", "°C")
+    if raw in ("on", "off"):
+        return 1.0 if raw == "on" else 0.0
     try:
-        return float(value)
+        value = float(raw)
     except (TypeError, ValueError):
         return None
+    if unit == "°F":
+        value = (value - 32.0) * 5.0 / 9.0
+    return round(value, 4)
 
 
 async def async_series(
@@ -190,7 +206,7 @@ async def async_series(
             for entity_id in entity_ids:
                 points = []
                 for state in raw.get(entity_id, []):
-                    value = _number(getattr(state, "state", None))
+                    value = reading_of(state)
                     if value is not None:
                         points.append((state.last_updated_timestamp, value))
                 out[entity_id] = points

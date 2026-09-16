@@ -49,6 +49,15 @@ const select = opt("select", null);
  * second one made a broken flow look like a working one.
  */
 const clicks = args.flatMap((arg, i) => (arg === "--click" ? [args[i + 1]] : []));
+/**
+ * Point at something, so a crosshair and a readout can be photographed.
+ *
+ * `--hover <selector>` moves over the middle of it; `--hover-at <0..1>` moves
+ * over that fraction of its width instead, which is how you reach a
+ * particular moment on a chart.
+ */
+const hover = opt("hover", null);
+const hoverAt = Number(opt("hover-at", 0.5));
 
 const work = mkdtempSync(join(tmpdir(), "room-thermostat-preview-"));
 writeFileSync(join(work, "page.js"), `${execFileSync("cat", [PAGE])}`);
@@ -87,6 +96,22 @@ writeFileSync(join(work, "harness.html"), `<!doctype html>
     if (!target) failures.push("no element matches " + ${JSON.stringify(selector)});
     target?.click();
   }`).join("")}
+  ${hover === null ? "" : `
+  await new Promise((done) => setTimeout(done, 400));
+  {
+    const target = el.shadowRoot.querySelector(${JSON.stringify(hover)});
+    if (!target) failures.push("no element to hover matches " + ${JSON.stringify(hover)});
+    if (target) {
+      const box = target.getBoundingClientRect();
+      const at = {
+        clientX: box.left + box.width * ${hoverAt},
+        clientY: box.top + box.height / 2,
+        bubbles: true,
+      };
+      target.dispatchEvent(new PointerEvent("pointermove", at));
+    }
+    await new Promise((done) => setTimeout(done, 200));
+  }`}
   ${select === null ? "" : `
   await new Promise((done) => setTimeout(done, 400));
   const slot = el.shadowRoot.querySelector('[data-select-widget="${select}"]');
@@ -270,7 +295,7 @@ try {
     await send("Page.enable");
     await send("Page.navigate", { url: `http://127.0.0.1:${port}/harness.html` });
     // The harness drives itself with real timers, so this is wall-clock.
-    await new Promise((wait) => setTimeout(wait, settle + clicks.length * 450 + (select === null ? 0 : 700) + 600));
+    await new Promise((wait) => setTimeout(wait, settle + clicks.length * 450 + (hover === null ? 0 : 700) + (select === null ? 0 : 700) + 600));
     const shot = await send("Page.captureScreenshot", { format: "png" });
     writeFileSync(out, Buffer.from(shot.data, "base64"));
     // An audit is a list of names and numbers: worth having in the terminal,

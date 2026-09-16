@@ -235,3 +235,50 @@ def test_only_days_that_used_heat_are_fitted(source: str):
     meaningful where heating ran."""
     fit = source[source.index("hoursAt(days, outdoor)") : source.index("signature(data)")]
     assert "day.hours > 0" in fit
+
+
+# --- what the first look at it on real hardware turned up ----------------
+
+
+def test_every_select_carries_the_wrapper_that_draws_its_arrow(source: str):
+    """The stylesheet sets appearance:none and supplies the chevron from
+    .select-wrap::after. A bare select is a box with no sign it opens."""
+    import re
+
+    for match in re.finditer(r"<select\b", source):
+        before = source[max(0, match.start() - 400) : match.start()]
+        assert "select-wrap" in before, source[match.start() : match.start() + 60]
+
+
+def test_the_editor_hides_the_tab_bar(source: str):
+    """A room's settings is somewhere you went into. Tabs say you are still
+    choosing between three peers."""
+    assert 'this.editing ? "" : `<nav class="tabs">' in source
+
+
+def test_an_entity_is_chosen_by_searching_rather_than_typed(source: str):
+    """Typing an entity id from memory is how you get a room pointed at
+    something that does not exist."""
+    assert "entityPicker(" in source
+    assert "data-entity-search" in source
+    assert 'this.entityPicker("temperature_sensor"' in source
+
+
+def test_typing_in_a_picker_clears_the_chosen_entity(source: str):
+    """A half-typed search must never be saved as though it were an id."""
+    picker = source[source.index("bindPickers(root)") : source.index("takePicker(hidden)")]
+    assert 'hidden.value = ""' in picker
+
+
+def test_the_timeline_answers_a_pointer(source: str):
+    """A chart you cannot interrogate is a picture. The numbers are the
+    reason to open it."""
+    assert "pointermove" in source
+    assert "data-crosshair" in source
+    assert "data-readout" in source
+
+
+def test_the_page_uses_the_width_it_is_given(source: str):
+    """1180px came from the panel manager, whose workspace was three narrow
+    columns. This page is cards and charts."""
+    assert "max-width:var(--content-max)" not in source

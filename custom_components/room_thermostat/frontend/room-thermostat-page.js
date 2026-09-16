@@ -181,7 +181,7 @@ hr { border:0; border-top:1px solid var(--line); margin:0; }
 ::-webkit-scrollbar-thumb { background:var(--surface-raised); }
 ::-webkit-scrollbar-track { background:transparent; }
 
-main { max-width:var(--content-max); margin:0 auto; padding:var(--page-inset); }
+main { max-width:none; margin:0; padding:0; }
 main.wide { max-width:none; }
 
 
@@ -348,6 +348,7 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .crumbs { display:flex; align-items:center; gap:var(--s2); font:400 13px/1 var(--font); color:var(--muted); }
 .crumbs .sep { color:var(--disabled); }
 .crumbs .here { font:700 15px/1 var(--font); color:var(--ink); }
+.crumbs .back { height:28px; padding:0 var(--s3); }
 
 .tabs { height:var(--tab-bar); display:flex; padding:0 var(--page-inset); border-bottom:1px solid var(--line); overflow-x:auto; }
 .tabs button { height:100%; border:0; border-radius:0; background:transparent; color:var(--muted); padding:0 var(--s4); }
@@ -364,7 +365,10 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 
 /* 8 ── ROOMS ──────────────────────────────────────────────── */
 
-.page { padding:var(--s5) var(--page-inset) var(--s6); }
+/* Wider than the panel manager's workspace, which was three narrow columns.
+   This page is cards and charts, and 1180px of it left half a large screen
+   empty. */
+.page { padding:var(--s5) var(--page-inset) var(--s6); max-width:1680px; margin:0 auto; }
 .page-head { margin-bottom:var(--s5); }
 .page-head h1 { font:700 24px/1.2 var(--font); margin:0 0 var(--s2); }
 .page-head p { margin:0; color:var(--muted); max-width:62ch; }
@@ -381,7 +385,8 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
   align-items:baseline; gap:var(--s2); }
 .room-card .reading small { font:400 13px/1 var(--font); color:var(--muted); }
 .room-card .controls { display:flex; gap:var(--s2); }
-.room-card .controls select { flex:1; min-width:0; }
+.room-card .controls .select-wrap { flex:1; min-width:0; }
+.room-card .controls select { width:100%; }
 .room-card .controls .setpoint { position:relative; flex:none; width:6.5em; }
 .room-card .controls .setpoint input { width:100%; padding-right:2.2em; }
 .room-card .controls .setpoint span { position:absolute; right:var(--s3); top:50%;
@@ -406,7 +411,26 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .empty p { color:var(--muted); margin:0 0 var(--s4); }
 
 
-/* 9 ── EDITOR ─────────────────────────────────────────────── */
+/* 9 ── PICKERS ────────────────────────────────────────────── */
+
+.entity-picker { position:relative; }
+.entity-results { position:absolute; left:0; right:0; z-index:5;
+  border:1px solid var(--line); border-top:0; margin-top:-1px; max-height:280px;
+  overflow:auto; overflow-x:hidden; background:var(--canvas); }
+.entity-results button { display:flex; flex-direction:column; align-items:flex-start;
+  justify-content:center; gap:2px; width:100%; height:52px; border:0; border-radius:0;
+  background:transparent; padding:0 var(--s3); text-align:left; }
+.entity-results button + button { border-top:1px solid var(--line); }
+.entity-results b, .entity-results small { max-width:100%; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+.entity-results button:hover { background:var(--surface-raised); }
+.entity-results b { font:400 14px/1.2 var(--font); }
+.entity-results small { font:500 12px/1.3 var(--mono); color:var(--muted); }
+.entity-results .none { padding:var(--s3); color:var(--muted); font:400 13px/1.4 var(--font); }
+.entity-chosen { font:500 12px/1.3 var(--mono); color:var(--muted); }
+
+
+/* 10 ── EDITOR ────────────────────────────────────────────── */
 
 .editor { max-width:720px; display:flex; flex-direction:column; gap:var(--s4); }
 /* A band label names the group beneath it and separates it from the one
@@ -417,6 +441,8 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .editor .field { display:flex; flex-direction:column; gap:var(--s2); }
 .editor .field > span { font:500 14px/1 var(--font); }
 .editor .field small { color:var(--muted); font:400 12px/1.5 var(--font); }
+.editor .field > span { font:500 14px/1 var(--font); }
+.entity-list { display:flex; flex-direction:column; gap:var(--s2); }
 .editor .field .problem { color:var(--danger); }
 .editor .field.invalid input, .editor .field.invalid select { border-color:var(--danger); }
 .editor .row { display:flex; gap:var(--s3); align-items:flex-end; }
@@ -433,14 +459,43 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .foot strong { color:var(--ink); }
 
 
-/* 10 ── HISTORY ───────────────────────────────────────────── */
+/* 11 ── HISTORY ───────────────────────────────────────────── */
 
 .history { display:flex; flex-direction:column; gap:var(--s5); }
 .spans { display:flex; gap:var(--s2); }
 .spans button.active { background:var(--surface-raised); color:var(--ink); }
 
 .chart { background:var(--surface); border:1px solid var(--line); padding:var(--s4);
-  overflow-x:auto; }
+  overflow-x:auto; position:relative; }
+.chart svg[data-timeline] { touch-action:none; }
+
+line.crosshair { stroke:var(--ink); stroke-width:1; opacity:.5; }
+circle.crosshair-dot { stroke:var(--canvas); stroke-width:1.5; }
+circle.crosshair-dot.outdoor { fill:var(--muted); }
+circle.crosshair-dot.damped { fill:var(--accent); }
+circle.crosshair-dot.room-1 { fill:#6FB1D9; }
+circle.crosshair-dot.room-2 { fill:#9AD96F; }
+circle.crosshair-dot.room-3 { fill:#D98FBF; }
+
+/* The readings under the pointer. Home Assistant puts these in a floating
+   card; so does this, and it stays inside the chart rather than widening the
+   page at the right-hand edge. */
+.readout { position:absolute; top:var(--s4); z-index:4; pointer-events:none;
+  background:var(--surface-raised); border:1px solid var(--line);
+  padding:var(--s3); min-width:190px; }
+.readout[data-side=right] { margin-left:var(--s3); }
+.readout[data-side=left] { margin-right:var(--s3); }
+.readout p { display:flex; align-items:center; gap:var(--s2);
+  font:400 13px/1.6 var(--font); white-space:nowrap; }
+.readout p strong { margin-left:auto; font-variant-numeric:tabular-nums; }
+.readout .when { font:500 12px/1.4 var(--mono); color:var(--muted);
+  padding-bottom:var(--s2); margin-bottom:var(--s2); border-bottom:1px solid var(--line); }
+.readout .swatch { display:inline-block; width:10px; height:10px; flex:none;
+  background:var(--muted); }
+.readout .swatch.damped { background:var(--accent); }
+.readout .swatch.room-1 { background:#6FB1D9; }
+.readout .swatch.room-2 { background:#9AD96F; }
+.readout .swatch.room-3 { background:#D98FBF; }
 .chart svg { display:block; width:100%; height:auto; min-width:320px; }
 
 /* A wash, not a block. The season is context behind the lines, and at full
@@ -490,7 +545,7 @@ line.measured { stroke:var(--accent); stroke-width:1; stroke-dasharray:3 3; }
   font-variant-numeric:tabular-nums; }
 
 
-/* 11 ── RESPONSIVE ────────────────────────────────────────── */
+/* 12 ── RESPONSIVE ────────────────────────────────────────── */
 
 @media (max-width:600px) {
   :host { --page-inset:var(--s3); }
@@ -538,6 +593,12 @@ const PROBLEMS = {
  * A 24-hour chart wants a clock and a 90-day one wants a date; both on both
  * is noise.
  */
+/** A moment in full, for the readout: the day and the time, both. */
+const moment_label = (timestamp) => {
+  const at = new Date(timestamp * 1000);
+  return `${at.toLocaleDateString([], { day: "numeric", month: "short" })} ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+};
+
 const when = (timestamp, span) => {
   const at = new Date(timestamp * 1000);
   return span === "24h"
@@ -685,16 +746,20 @@ class RoomThermostatPage extends HTMLElement {
       <header class="app-bar">
         <span class="mark"></span>
         <nav class="crumbs">
-          <a class="link" href="#rooms">Room Thermostat</a>
-          ${this.editing ? `<span class="sep">/</span><span class="here">${escapeHtml(this.draft?.name || "New room")}</span>` : ""}
+          ${this.editing
+            ? `<button class="back" data-cancel aria-label="Back to rooms">←</button>
+               <a class="link" href="#rooms">Rooms</a>
+               <span class="sep">/</span>
+               <span class="here">${escapeHtml(this.draft?.name || "New room")}</span>`
+            : `<span class="here">Room Thermostat</span>`}
         </nav>
         <span class="spacer"></span>
         ${this.error ? `<span class="save-state dirty">${escapeHtml(this.error)}</span>` : ""}
       </header>
-      <nav class="tabs">
+      ${this.editing ? "" : `<nav class="tabs">
         ${TABS.map(([key, label]) =>
-          `<button data-tab="${key}" class="${key === this.tab && !this.editing ? "active" : ""}">${label}</button>`).join("")}
-      </nav>
+          `<button data-tab="${key}" class="${key === this.tab ? "active" : ""}">${label}</button>`).join("")}
+      </nav>`}
       <main class="page">${body}</main>`;
   }
 
@@ -741,6 +806,9 @@ class RoomThermostatPage extends HTMLElement {
     root.querySelectorAll("[data-delete]").forEach((button) => {
       button.addEventListener("click", () => this.deleteRoom());
     });
+
+    this.bindPickers(root);
+    this.bindTimeline(root);
 
     const form = root.querySelector("form");
     if (!form) return;
@@ -815,10 +883,12 @@ class RoomThermostatPage extends HTMLElement {
       <header><span class="name">${escapeHtml(room.name)}</span></header>
       <p class="reading">${reading} ${humidity}</p>
       <div class="controls">
-        <select data-mode="${room.id}" aria-label="Mode">
-          ${live.modes.map((mode) =>
-            `<option value="${mode}" ${mode === live.mode ? "selected" : ""}>${MODES[mode] || mode}</option>`).join("")}
-        </select>
+        <div class="select-wrap">
+          <select data-mode="${room.id}" aria-label="Mode">
+            ${live.modes.map((mode) =>
+              `<option value="${mode}" ${mode === live.mode ? "selected" : ""}>${MODES[mode] || mode}</option>`).join("")}
+          </select>
+        </div>
         <label class="setpoint">
           <input type="number" step="0.5" data-target="${room.id}" aria-label="Setpoint"
                  value="${live.target ?? ""}" ${live.target === undefined || live.target === null ? "disabled" : ""}>
@@ -867,6 +937,86 @@ class RoomThermostatPage extends HTMLElement {
     });
   }
 
+  entityLabel(state) {
+    return `${state.attributes?.friendly_name || state.entity_id} · ${state.entity_id}`;
+  }
+
+  /**
+   * An entity chosen by searching, rather than typed from memory.
+   *
+   * The hidden input carries the entity id, which is what the record wants;
+   * the visible one carries a name somebody recognises. Typing clears the
+   * hidden one, so a half-typed search can never be saved as an entity id.
+   */
+  entityPicker(name, label, selected, domains, hint = "", deviceClass = null) {
+    const states = Object.values(this._hass?.states || {})
+      .filter((state) => domains.includes(state.entity_id.split(".")[0]))
+      .filter((state) =>
+        !deviceClass || state.attributes?.device_class === deviceClass ||
+        state.entity_id.startsWith("input_number.") || state.entity_id.startsWith("number."))
+      .sort((first, second) => this.entityLabel(first).localeCompare(this.entityLabel(second)));
+    const chosen = selected ? this._hass?.states?.[selected] : null;
+    const display = chosen ? this.entityLabel(chosen) : selected || "";
+    const problem = this.problems[name];
+    return `<label class="field ${problem ? "invalid" : ""}">
+      <span>${escapeHtml(label)}</span>
+      <div class="entity-picker">
+        <input type="hidden" name="${name}" value="${escapeHtml(selected || "")}">
+        <input class="entity-search" data-entity-search type="search" autocomplete="off"
+               value="${escapeHtml(display)}" placeholder="Search entities…"
+               aria-label="${escapeHtml(label)}">
+        <div class="entity-results" hidden>
+          ${states.length ? states.map((state) => {
+            const option = this.entityLabel(state);
+            return `<button type="button" data-entity-option="${escapeHtml(state.entity_id)}"
+                      data-entity-label="${escapeHtml(option)}"
+                      data-entity-terms="${escapeHtml(option.toLowerCase())}">
+                      <b>${escapeHtml(state.attributes?.friendly_name || state.entity_id)}</b>
+                      <small>${escapeHtml(state.entity_id)}</small>
+                    </button>`;
+          }).join("") : `<p class="none">Nothing of that kind in this house.</p>`}
+        </div>
+      </div>
+      ${problem ? `<small class="problem">${escapeHtml(PROBLEMS[problem] || problem)}</small>` : ""}
+      ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
+    </label>`;
+  }
+
+  /** Several entities of one kind, each picked the same way. */
+  entityList(name, label, selected, domains, hint = "") {
+    const values = [...(selected || []), ""];
+    return `<div class="field"><span>${escapeHtml(label)}</span>
+      <div class="entity-list" data-entity-list="${name}">
+        ${values.map((value, index) => {
+          const state = value ? this._hass?.states?.[value] : null;
+          const display = state ? this.entityLabel(state) : value || "";
+          const states = Object.values(this._hass?.states || {})
+            .filter((item) => domains.includes(item.entity_id.split(".")[0]))
+            .sort((first, second) => this.entityLabel(first).localeCompare(this.entityLabel(second)));
+          return `<div class="entity-picker">
+            <input type="hidden" data-list-value="${name}" value="${escapeHtml(value)}">
+            <input class="entity-search" data-entity-search type="search" autocomplete="off"
+                   value="${escapeHtml(display)}"
+                   placeholder="${index === values.length - 1 ? "Add another…" : "Search entities…"}"
+                   aria-label="${escapeHtml(label)}">
+            <div class="entity-results" hidden>
+              ${states.length ? states.map((item) => {
+                const option = this.entityLabel(item);
+                return `<button type="button" data-entity-option="${escapeHtml(item.entity_id)}"
+                          data-entity-label="${escapeHtml(option)}"
+                          data-entity-terms="${escapeHtml(option.toLowerCase())}">
+                          <b>${escapeHtml(item.attributes?.friendly_name || item.entity_id)}</b>
+                          <small>${escapeHtml(item.entity_id)}</small>
+                        </button>`;
+              }).join("") : `<p class="none">Nothing of that kind in this house.</p>`}
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+      ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
+    </div>`;
+  }
+
   field(name, label, value, hint = "") {
     const problem = this.problems[name];
     return `<label class="field ${problem ? "invalid" : ""}">
@@ -898,18 +1048,23 @@ class RoomThermostatPage extends HTMLElement {
       <form class="editor">
         ${this.field("name", "Name", draft.name,
           "What this room is called, here and in Home Assistant.")}
-        ${this.field("temperature_sensor", "Temperature sensor", draft.temperature_sensor,
-          "The reason this integration exists: the room is controlled against this, never against the air conditioner's own sensor.")}
-        ${this.field("humidity_sensor", "Humidity sensor", draft.humidity_sensor)}
-        ${this.field("cooler", "Air conditioner", draft.cooler,
+        ${this.entityPicker("temperature_sensor", "Temperature sensor", draft.temperature_sensor,
+          ["sensor", "input_number", "number"],
+          "The reason this integration exists: the room is controlled against this, never against the air conditioner's own sensor.",
+          "temperature")}
+        ${this.entityPicker("humidity_sensor", "Humidity sensor", draft.humidity_sensor,
+          ["sensor", "input_number", "number"], "", "humidity")}
+        ${this.entityPicker("cooler", "Air conditioner", draft.cooler, ["climate"],
           "Any climate entity. Its fan, swing and preset lists are mirrored rather than replaced.")}
-        ${this.field("heaters", "Heaters", (draft.heaters || []).join(", "),
-          "Valves or switches, separated by commas. A radiator valve is a valve entity, not a switch.")}
+        ${this.entityList("heaters", "Heaters", draft.heaters, ["valve", "switch", "input_boolean"],
+          "A radiator valve is a valve entity, not a switch. A room may have several, and they open together.")}
         <label class="field"><span>Cooling strategy</span>
-          <select name="cooling_strategy">
-            <option value="passthrough" ${draft.cooling_strategy !== "gated" ? "selected" : ""}>Pass the setpoint to the unit</option>
-            <option value="gated" ${draft.cooling_strategy === "gated" ? "selected" : ""}>Park the unit and gate it on the room's sensor</option>
-          </select>
+          <div class="select-wrap">
+            <select name="cooling_strategy">
+              <option value="passthrough" ${draft.cooling_strategy !== "gated" ? "selected" : ""}>Pass the setpoint to the unit</option>
+              <option value="gated" ${draft.cooling_strategy === "gated" ? "selected" : ""}>Park the unit and gate it on the room's sensor</option>
+            </select>
+          </div>
           <small>Gated is for a unit whose sensor reads its own recirculated air and stops while the room is still warm.</small>
         </label>
         ${this.number("frost_temperature", "Frost protection", draft.frost_temperature ?? 5, "°C",
@@ -976,7 +1131,8 @@ class RoomThermostatPage extends HTMLElement {
       </div>
       <form class="editor house">
         <div class="band-label">Outdoor</div>
-        ${this.field("outdoor_sensor", "Outdoor temperature", house.outdoor_sensor,
+        ${this.entityPicker("outdoor_sensor", "Outdoor temperature", house.outdoor_sensor,
+          ["sensor", "weather", "input_number", "number"],
           "A sensor or a weather entity. Put a sensor in shade: one in afternoon sun reads far too warm and would hold the heating off on a cold day. Leave it empty and nothing is held back at all.")}
         ${this.seasonExplainer()}
 
@@ -1076,8 +1232,12 @@ class RoomThermostatPage extends HTMLElement {
       pad.left + (index / Math.max(1, data.buckets - 1)) * (width - pad.left - pad.right);
     const y = (value) =>
       pad.top + (1 - (value - low) / Math.max(1, high - low)) * (height - pad.top - pad.bottom);
+    // Everything the crosshair needs to answer a hover, kept beside the
+    // drawing rather than recomputed from the DOM.
+    this.plot = { data, shown, width, height, pad, low, high };
+
     return `<div class="chart">
-      <svg viewBox="0 0 ${width} ${height}" role="img"
+      <svg viewBox="0 0 ${width} ${height}" role="img" data-timeline
            aria-label="Outdoor and indoor temperatures against the heating limit">
         <rect class="hysteresis-band" x="${pad.left}" y="${y(limit + hysteresis).toFixed(1)}"
               width="${width - pad.left - pad.right}"
@@ -1091,7 +1251,10 @@ class RoomThermostatPage extends HTMLElement {
         <text class="axis" x="4" y="${y(low).toFixed(1)}">${low}</text>
         <text class="axis" x="${pad.left}" y="${height - 6}">${when(data.start, this.span)}</text>
         <text class="axis" text-anchor="end" x="${width - pad.right}" y="${height - 6}">${when(data.end, this.span)}</text>
+        <line class="crosshair" data-crosshair y1="${pad.top}" y2="${height - pad.bottom}" hidden></line>
+        <g data-crosshair-dots hidden></g>
       </svg>
+      <div class="readout" data-readout hidden></div>
       <ul class="legend">
         ${this.timelineSeries(data).map((line) =>
           `<li><button data-series="${line.key}" class="${this.hiddenSeries.has(line.key) ? "off" : ""}">
@@ -1108,6 +1271,76 @@ class RoomThermostatPage extends HTMLElement {
       const at = data.start + (index + 0.5) * width;
       return data.seasons.some(([from, to]) => at >= from && at < to) ? 1 : 0;
     });
+  }
+
+  /**
+   * Which bucket a pointer is over, and what every line reads there.
+   *
+   * A chart you cannot interrogate is a picture. The numbers are the reason
+   * to open it.
+   */
+  bindTimeline(root) {
+    const svg = root.querySelector("[data-timeline]");
+    const plot = this.plot;
+    if (!svg || !plot) return;
+    const line = svg.querySelector("[data-crosshair]");
+    const dots = svg.querySelector("[data-crosshair-dots]");
+    const readout = root.querySelector("[data-readout]");
+    const { data, shown, width, height, pad, low, high } = plot;
+    const x = (index) =>
+      pad.left + (index / Math.max(1, data.buckets - 1)) * (width - pad.left - pad.right);
+    const y = (value) =>
+      pad.top + (1 - (value - low) / Math.max(1, high - low)) * (height - pad.top - pad.bottom);
+
+    const hide = () => {
+      line.setAttribute("hidden", "");
+      dots.setAttribute("hidden", "");
+      readout.setAttribute("hidden", "");
+    };
+
+    const show = (event) => {
+      const box = svg.getBoundingClientRect();
+      // The viewBox scales: a pointer's pixel is not the chart's unit.
+      const at = ((event.clientX - box.left) / box.width) * width;
+      const index = Math.round(
+        ((at - pad.left) / Math.max(1, width - pad.left - pad.right)) * (data.buckets - 1));
+      if (index < 0 || index >= data.buckets) return hide();
+
+      line.setAttribute("x1", x(index).toFixed(1));
+      line.setAttribute("x2", x(index).toFixed(1));
+      line.removeAttribute("hidden");
+
+      const readings = shown
+        .map((series) => ({ series, value: series.points[index] }))
+        .filter((row) => row.value !== null && row.value !== undefined);
+      dots.innerHTML = readings.map((row) =>
+        `<circle class="crosshair-dot ${row.series.className}" r="3"
+                 cx="${x(index).toFixed(1)}" cy="${y(row.value).toFixed(1)}"></circle>`).join("");
+      dots.removeAttribute("hidden");
+
+      const moment = data.start + ((data.end - data.start) * index) / Math.max(1, data.buckets - 1);
+      readout.innerHTML = `<p class="when">${moment_label(moment)}</p>
+        ${readings.map((row) =>
+          `<p><span class="swatch ${row.series.className}"></span>
+             ${escapeHtml(row.series.label)}
+             <strong>${row.value.toFixed(1)} °C</strong></p>`).join("")
+          || `<p class="muted">Nothing recorded here.</p>`}`;
+      // Kept inside the chart: a readout that follows the pointer off the
+      // right-hand edge widens the page.
+      const side = index > data.buckets / 2 ? "left" : "right";
+      readout.dataset.side = side;
+      readout.style.left = side === "right"
+        ? `${((x(index) / width) * 100).toFixed(2)}%`
+        : "auto";
+      readout.style.right = side === "left"
+        ? `${(100 - (x(index) / width) * 100).toFixed(2)}%`
+        : "auto";
+      readout.removeAttribute("hidden");
+    };
+
+    svg.addEventListener("pointermove", show);
+    svg.addEventListener("pointerdown", show);
+    svg.addEventListener("pointerleave", hide);
   }
 
   demandRows(data) {
@@ -1286,10 +1519,7 @@ class RoomThermostatPage extends HTMLElement {
   /** The draft as the record wants it: lists as lists, numbers as numbers. */
   roomPayload() {
     const draft = { ...this.draft };
-    draft.heaters = String(draft.heaters ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
+    draft.heaters = (draft.heaters || []).filter(Boolean);
     for (const key of ["humidity_sensor", "cooler"]) {
       if (draft[key] === "") draft[key] = null;
     }
@@ -1378,6 +1608,85 @@ class RoomThermostatPage extends HTMLElement {
       this.busy = false;
       this.render();
     }
+  }
+
+  bindPickers(root) {
+    root.querySelectorAll("[data-entity-search]").forEach((input) => {
+      const picker = input.closest(".entity-picker");
+      const results = picker?.querySelector(".entity-results");
+      const hidden = picker?.querySelector("input[type=hidden]");
+
+      const filter = (query = input.value.trim().toLowerCase()) => {
+        let shown = 0;
+        results?.querySelectorAll("[data-entity-option]").forEach((option) => {
+          // Capped: a house has thousands of entities and a list that long is
+          // slower to draw than it is to scroll.
+          const visible = (!query || option.dataset.entityTerms.includes(query)) && shown < 60;
+          option.toggleAttribute("hidden", !visible);
+          if (visible) shown += 1;
+        });
+        if (results) results.hidden = false;
+      };
+
+      /*
+       * Opening shows everything and selects what is there, rather than
+       * filtering by the name already chosen. Filtering by it offers one
+       * result — the thing you already have — which is the least useful list
+       * possible when what you want is to change it.
+       */
+      const open = () => {
+        input.select();
+        filter("");
+      };
+      // Focus is how a keyboard reaches it; click is how a pointer does, and
+      // a pointer clicking an already-focused field expects the list back.
+      input.addEventListener("focus", open);
+      input.addEventListener("click", open);
+      input.addEventListener("input", () => {
+        // Typing invalidates the choice. A half-typed search must never be
+        // saved as though it were an entity id.
+        if (hidden) {
+          hidden.value = "";
+          this.takePicker(hidden);
+        }
+        filter();
+      });
+
+      results?.querySelectorAll("[data-entity-option]").forEach((option) => {
+        option.addEventListener("click", () => {
+          if (hidden) {
+            hidden.value = option.dataset.entityOption;
+            this.takePicker(hidden);
+          }
+          input.value = option.dataset.entityLabel;
+          results.hidden = true;
+          // A list gains an empty row as soon as its last one is filled.
+          if (hidden?.dataset.listValue) this.render();
+        });
+      });
+    });
+
+    // Clicking anywhere else closes whichever list is open.
+    root.addEventListener("pointerdown", (event) => {
+      const inside = event.composedPath().find(
+        (node) => node?.classList?.contains("entity-picker"));
+      root.querySelectorAll(".entity-results:not([hidden])").forEach((results) => {
+        if (results.closest(".entity-picker") !== inside) results.hidden = true;
+      });
+    }, true);
+  }
+
+  /** A picker's hidden input, written into whichever draft is open. */
+  takePicker(hidden) {
+    const list = hidden.dataset.listValue;
+    if (list) {
+      const values = [...this.shadowRoot.querySelectorAll(`[data-list-value="${list}"]`)]
+        .map((input) => input.value)
+        .filter(Boolean);
+      this.draft = { ...(this.draft || {}), [list]: values };
+      return;
+    }
+    this.take(hidden);
   }
 
   take(field) {
