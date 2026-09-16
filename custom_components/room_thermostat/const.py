@@ -6,6 +6,7 @@ DOMAIN = "room_thermostat"
 # carry no such key, and are rooms.
 CONF_ENTRY_TYPE = "entry_type"
 ENTRY_ROOM = "room"
+ENTRY_HUB = "hub"
 ENTRY_SEASONS = "seasons"
 
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
@@ -95,3 +96,11 @@ STORE_VERSION = 1
 SIGNAL_ROOMS = "room_thermostat_rooms"
 # One room's settings changed, by id. Its entities re-read and re-subscribe.
 SIGNAL_ROOM = "room_thermostat_room"
+
+# --- the page ------------------------------------------------------------
+
+PAGE_COMPONENT = "room-thermostat-page"
+PAGE_URL_PATH = "room-thermostat"
+# Keep the query string in step with the manifest version: a browser serves
+# the cached page until it changes, so a drift ships code nobody loads.
+PAGE_MODULE_URL = "/room_thermostat/frontend/room-thermostat-page.js?v=0.13.0"

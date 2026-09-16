@@ -7,10 +7,19 @@ from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 
-from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_ROOM, ENTRY_SEASONS
+from .const import (
+    CONF_ENTRY_TYPE,
+    DOMAIN,
+    ENTRY_HUB,
+    ENTRY_ROOM,
+    ENTRY_SEASONS,
+)
+from .page import async_register_page, async_setup_page_assets, async_unregister_page
+from .store import RoomStore
 
 ROOM_PLATFORMS = [Platform.CLIMATE, Platform.BINARY_SENSOR]
 SEASONS_PLATFORMS = [Platform.BINARY_SENSOR]
+HUB_PLATFORMS = [Platform.BINARY_SENSOR]
 
 
 def entry_type(entry: ConfigEntry) -> str:
@@ -22,11 +31,22 @@ def entry_type(entry: ConfigEntry) -> str:
 
 
 def platforms(entry: ConfigEntry) -> list[Platform]:
-    return SEASONS_PLATFORMS if entry_type(entry) == ENTRY_SEASONS else ROOM_PLATFORMS
+    kind = entry_type(entry)
+    if kind == ENTRY_HUB:
+        return HUB_PLATFORMS
+    if kind == ENTRY_SEASONS:
+        return SEASONS_PLATFORMS
+    return ROOM_PLATFORMS
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"demand": False}
+    if entry_type(entry) == ENTRY_HUB:
+        store = RoomStore(hass)
+        await store.async_load()
+        hass.data[DOMAIN]["store"] = store
+        await async_setup_page_assets(hass)
+        async_register_page(hass)
     await hass.config_entries.async_forward_entry_setups(entry, platforms(entry))
     # Editing the options changes the control loop's parameters, and the
     # simplest correct response is to rebuild the entities around them.
@@ -81,6 +101,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        if entry_type(entry) == ENTRY_HUB:
+            async_unregister_page(hass)
+            hass.data.get(DOMAIN, {}).pop("store", None)
     return unloaded
 
 

@@ -63,6 +63,7 @@ from .const import (
     DEFAULT_SEASON_OVERRIDE,
     DEFAULT_VALVE_TRAVEL,
     DOMAIN,
+    ENTRY_HUB,
     ENTRY_SEASONS,
     STRATEGY_GATED,
     STRATEGY_PASSTHROUGH,
@@ -427,20 +428,17 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            errors = _problems(self.hass, user_input)
-            if not errors:
-                return self.async_create_entry(
-                    title=user_input["name"],
-                    data={"name": user_input["name"]},
-                    options={
-                        **default_options(),
-                        **{k: v for k, v in user_input.items() if k in SOURCE_KEYS},
-                    },
-                )
-        return self.async_show_form(
-            step_id="user", data_schema=ROOM_SCHEMA, errors=errors
+        """Add the integration. There is one of these, and it is the door.
+
+        Rooms are not made here any more: they are made on the page, which is
+        the record. This only brings the integration into being, so that the
+        page exists to make them on.
+        """
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_HUB:
+                return self.async_abort(reason="single_instance_allowed")
+        return self.async_create_entry(
+            title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
         )
 
     async def async_step_import(

@@ -5,6 +5,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.room_thermostat import entry_type
 from custom_components.room_thermostat.config_flow import default_options
 from custom_components.room_thermostat.const import (
+    CONF_ENTRY_TYPE,
     CONF_HEATERS,
     CONF_TEMPERATURE_SENSOR,
     DOMAIN,
@@ -65,3 +66,64 @@ def test_an_entry_without_a_type_is_a_room():
     """Every room that exists today predates the key and must keep working."""
     entry = MockConfigEntry(domain=DOMAIN, title="Bedroom", data={"name": "Bedroom"})
     assert entry_type(entry) == ENTRY_ROOM
+
+
+async def test_the_hub_registers_a_page_in_the_sidebar(hass: HomeAssistant):
+    from homeassistant.components import frontend
+
+    from custom_components.room_thermostat.const import ENTRY_HUB, PAGE_URL_PATH
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert PAGE_URL_PATH in hass.data[frontend.DATA_PANELS]
+
+
+async def test_the_hub_loads_the_store(hass: HomeAssistant):
+    from custom_components.room_thermostat.const import ENTRY_HUB
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.data[DOMAIN]["store"].rooms == ()
+
+
+async def test_adding_the_integration_creates_the_hub_and_only_one(
+    hass: HomeAssistant,
+):
+    from custom_components.room_thermostat.const import ENTRY_HUB
+
+    first = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}, data={}
+    )
+    assert first["type"] == "create_entry"
+    assert first["data"][CONF_ENTRY_TYPE] == ENTRY_HUB
+
+    second = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}, data={}
+    )
+    assert second["type"] == "abort"
+    assert second["reason"] == "single_instance_allowed"
+
+
+def test_the_page_module_url_matches_the_manifest_version():
+    """A browser serves the cached page until this query string changes, so a
+    release that forgets it ships code nobody loads."""
+    import json
+    from pathlib import Path
+
+    from custom_components.room_thermostat.const import PAGE_MODULE_URL
+
+    manifest = json.loads(
+        (
+            Path(__file__).parent.parent
+            / "custom_components/room_thermostat/manifest.json"
+        ).read_text()
+    )
+    assert PAGE_MODULE_URL.endswith(f"?v={manifest['version']}")
