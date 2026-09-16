@@ -16,6 +16,7 @@ from .const import (
     ENTRY_HUB,
     ENTRY_ROOM,
 )
+from .migration import async_migrate
 from .page import async_register_page, async_setup_page_assets, async_unregister_page
 from .store import RoomStore
 
@@ -63,7 +64,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Editing the options changes the control loop's parameters, and the
     # simplest correct response is to rebuild the entities around them.
     entry.async_on_unload(entry.add_update_listener(_reload))
+    if entry_type(entry) == ENTRY_ROOM:
+        _ask_for_hub(hass)
+    if entry_type(entry) == ENTRY_HUB:
+        # Scheduled rather than awaited. A house that predates the hub asks
+        # for one *while its rooms are still setting up*, and an entry cannot
+        # be unloaded mid-setup — so the migration waits its turn, and the
+        # rooms it moves are picked up by the record's own signal.
+        hass.async_create_task(async_migrate(hass, entry))
     return True
+
+
+@callback
+def _ask_for_hub(hass: HomeAssistant) -> None:
+    """A house with rooms and no hub gets one made for it.
+
+    A fresh install makes its hub when the integration is added. This is for
+    the houses that predate it, where adding one by hand would be exactly the
+    chore this change removes — and the hub is what runs the migration, so
+    without it those rooms would sit as entries forever.
+
+    The flag stops several rooms setting up at once from starting several
+    flows; the flow checks again for itself, because the flag does not survive
+    a reload.
+    """
+    store = hass.data.setdefault(DOMAIN, {})
+    if store.get("hub_requested"):
+        return
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_HUB:
+            return
+    store["hub_requested"] = True
+    hass.async_create_task(
+        hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_IMPORT})
+    )
 
 
 @callback

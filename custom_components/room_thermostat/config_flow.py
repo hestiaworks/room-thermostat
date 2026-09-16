@@ -360,28 +360,11 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
             title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
         )
 
-    async def async_step_reconfigure(
+    async def async_step_import(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Change which sensors and devices a room uses.
+        """Make the hub for a house that predates it.
 
-        Deleting and recreating the room would work, and would also take its
-        history, its entity ids and every dashboard card pointing at them. The
-        tunables are left alone: they live in the entry's options and are
-        edited separately.
+        Reachable only from code, when rooms are found with nowhere to live.
         """
-        entry = self._get_reconfigure_entry()
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            errors = _problems(self.hass, user_input)
-            if not errors:
-                return self.async_update_reload_and_abort(
-                    entry, title=user_input["name"], data=user_input
-                )
-        return self.async_show_form(
-            step_id="reconfigure",
-            data_schema=self.add_suggested_values_to_schema(
-                ROOM_SCHEMA, user_input or entry.data
-            ),
-            errors=errors,
-        )
+        return await self.async_step_user()
