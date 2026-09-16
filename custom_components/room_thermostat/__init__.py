@@ -17,6 +17,7 @@ from .const import (
     ENTRY_ROOM,
 )
 from .migration import async_migrate
+from . import websocket
 from .page import async_register_page, async_setup_page_assets, async_unregister_page
 from .store import RoomStore
 
@@ -48,6 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         store = RoomStore(hass)
         await store.async_load()
         hass.data[DOMAIN]["store"] = store
+        websocket.async_register(hass)
         await async_setup_page_assets(hass)
         async_register_page(hass)
         # A callback, not a lambda: an undecorated callable is run in an
