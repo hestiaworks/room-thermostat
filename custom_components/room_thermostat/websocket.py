@@ -17,8 +17,10 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from . import history
+from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_HUB
 from .model import room_problems
 from .store import RoomStore
 
@@ -162,7 +164,118 @@ async def ws_house(hass, connection, msg) -> None:
     connection.send_result(msg["id"], house.to_dict())
 
 
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command({
+    vol.Required("type"): "room_thermostat/history",
+    vol.Required("span"): vol.In(list(history.SPANS)),
+})
+async def ws_history(hass, connection, msg) -> None:
+    """Everything the history tab draws, in one answer.
+
+    One command rather than one per series: they share a window and a bucket
+    width, and a chart drawn from six separately-bucketed answers would have
+    six subtly different time axes.
+    """
+    try:
+        store = _store(hass)
+    except ValueError as err:
+        connection.send_error(msg["id"], "not_configured", str(err))
+        return
+
+    span = msg["span"]
+    end = dt_util.utcnow().timestamp()
+    start = end - history.SPANS[span]
+    count = history.BUCKETS[span]
+
+    hub = next(
+        (
+            entry
+            for entry in hass.config_entries.async_entries(DOMAIN)
+            if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_HUB
+        ),
+        None,
+    )
+    if hub is None:
+        connection.send_error(msg["id"], "not_configured", "No hub")
+        return
+
+    registry = er.async_get(hass)
+
+    def _entity(domain: str, unique: str) -> str | None:
+        return registry.async_get_entity_id(domain, DOMAIN, unique)
+
+    average = _entity("sensor", f"{hub.entry_id}_outdoor_average")
+    season = _entity("binary_sensor", f"{hub.entry_id}_heating_season")
+    outdoor = store.house.outdoor_sensor
+    rooms = {
+        room.id: {
+            "name": room.name,
+            "temperature": room.temperature_sensor,
+            "demand": _entity("sensor", f"{room.id}_heat_demand_number"),
+        }
+        for room in store.rooms
+    }
+
+    wanted = [
+        entity_id
+        for entity_id in [
+            outdoor,
+            average,
+            season,
+            *[room["temperature"] for room in rooms.values()],
+            *[room["demand"] for room in rooms.values()],
+        ]
+        if entity_id
+    ]
+    series = await history.async_series(hass, wanted, start, end)
+
+    def _bucket(entity_id: str | None) -> list[float | None]:
+        return history.bucket(series.get(entity_id or "", []), start, end, count)
+
+    # The energy signature always reads hourly statistics, whatever span the
+    # chart above it is showing: a dot is a whole day either way.
+    day_start = end - history.SPANS["90d"]
+    day_source = average or outdoor
+    day_series = await history.async_series(
+        hass,
+        [
+            entity_id
+            for entity_id in [day_source, *[room["demand"] for room in rooms.values()]]
+            if entity_id
+        ],
+        day_start,
+        end,
+    )
+    outdoor_days = history.hourly_by_day(day_series.get(day_source or "", []))
+    demand_days: dict[str, list[float]] = {}
+    for room in rooms.values():
+        for date, values in history.hourly_by_day(
+            day_series.get(room["demand"] or "", [])
+        ).items():
+            demand_days.setdefault(date, []).extend(values)
+    days = history.daily(outdoor_days, demand_days)
+
+    connection.send_result(msg["id"], {
+        "start": start,
+        "end": end,
+        "buckets": count,
+        "series": {
+            "outdoor": _bucket(outdoor),
+            "damped": _bucket(average),
+            "rooms": {
+                room_id: {"name": room["name"], "points": _bucket(room["temperature"])}
+                for room_id, room in rooms.items()
+            },
+        },
+        "seasons": history.spans_of(series.get(season or "", []), start, end),
+        "demand": {room_id: _bucket(room["demand"]) for room_id, room in rooms.items()},
+        "daily": days,
+        "balance_point": history.balance_point(days),
+    })
+
+
 @callback
 def async_register(hass: HomeAssistant) -> None:
-    for command in (ws_list, ws_create, ws_update, ws_delete, ws_house):
+    for command in (ws_list, ws_create, ws_update, ws_delete, ws_house, ws_history):
         websocket_api.async_register_command(hass, command)

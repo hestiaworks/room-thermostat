@@ -1,6 +1,9 @@
 {
   "domain": "room_thermostat",
   "name": "Room Thermostat",
+  "after_dependencies": [
+    "recorder"
+  ],
   "codeowners": [
     "@theseus-elysium"
   ],
