@@ -14,10 +14,16 @@ sensors, not the unit's internal one.
 
 Add this repository to HACS as a custom repository of type **Integration**,
 download it, and restart Home Assistant. Then **Settings → Devices & Services →
-Add Integration → Room Thermostat**, once per room.
+Add Integration → Room Thermostat**, once for the house.
 
-Rooms appear under the **Helpers** tab, not Integrations: this wraps entities
-you already have rather than talking to hardware of its own.
+Everything else happens on the **Room Thermostat** page in the sidebar: adding
+rooms, configuring them, setting the heating and cooling seasons, and looking
+at what the house has been doing. There is nothing to configure under Helpers,
+and a room is never edited in two places.
+
+Upgrading from an earlier version moves your existing rooms onto that page by
+itself. Entity ids do not change, so dashboards, automations and panels keep
+working.
 
 ## What a room needs
 
