@@ -123,3 +123,121 @@ async def test_importing_leaves_rooms_it_already_has_alone(hass: HomeAssistant):
         [Room.from_dict({"id": "abc", "name": "Renamed"})], House()
     )
     assert [(r.id, r.name) for r in store.rooms] == [("abc", "Bedroom")]
+
+
+# --- the house built from the record -------------------------------------
+
+
+async def _house(hass: HomeAssistant):
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.room_thermostat.const import (
+        CONF_ENTRY_TYPE,
+        DOMAIN,
+        ENTRY_HUB,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry, hass.data[DOMAIN]["store"]
+
+
+async def test_a_room_added_to_the_record_appears_in_the_house(hass: HomeAssistant):
+    hass.states.async_set("sensor.bedroom_temperature", "21.0")
+    _, store = await _house(hass)
+    await store.async_add_room(
+        {"name": "Bedroom", "temperature_sensor": "sensor.bedroom_temperature",
+         "heaters": ["switch.radiator"]}
+    )
+    await hass.async_block_till_done()
+
+    assert hass.states.get("climate.bedroom") is not None
+    assert hass.states.get("binary_sensor.bedroom_heat_demand") is not None
+
+
+async def test_a_room_deleted_takes_its_entities_and_its_device(hass: HomeAssistant):
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.room_thermostat.const import DOMAIN
+
+    hass.states.async_set("sensor.bedroom_temperature", "21.0")
+    _, store = await _house(hass)
+    room = await store.async_add_room(
+        {"name": "Bedroom", "temperature_sensor": "sensor.bedroom_temperature",
+         "heaters": ["switch.radiator"]}
+    )
+    await hass.async_block_till_done()
+    assert dr.async_get(hass).async_get_device({(DOMAIN, room.id)}) is not None
+
+    await store.async_delete_room(room.id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("climate.bedroom") is None
+    assert dr.async_get(hass).async_get_device({(DOMAIN, room.id)}) is None
+
+
+async def test_changing_a_setting_does_not_disturb_the_entity(hass: HomeAssistant):
+    """The entity reads the record, so an edited tolerance takes effect on the
+    next loop and the room's mode and setpoint are left alone."""
+    hass.states.async_set("sensor.bedroom_temperature", "21.0")
+    hass.states.async_set("switch.radiator", "off")
+    _, store = await _house(hass)
+    room = await store.async_add_room(
+        {"name": "Bedroom", "temperature_sensor": "sensor.bedroom_temperature",
+         "heaters": ["switch.radiator"]}
+    )
+    await hass.async_block_till_done()
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.bedroom", "temperature": 23.0},
+        blocking=True,
+    )
+
+    await store.async_update_room(room.id, {"heat_cold_tolerance": 0.8})
+    await hass.async_block_till_done()
+
+    assert hass.states.get("climate.bedroom").attributes["temperature"] == 23.0
+
+
+async def test_a_renamed_room_renames_its_thermostat(hass: HomeAssistant):
+    hass.states.async_set("sensor.bedroom_temperature", "21.0")
+    _, store = await _house(hass)
+    room = await store.async_add_room(
+        {"name": "Bedroom", "temperature_sensor": "sensor.bedroom_temperature",
+         "heaters": ["switch.radiator"]}
+    )
+    await hass.async_block_till_done()
+
+    await store.async_update_room(room.id, {"name": "Guest room"})
+    await hass.async_block_till_done()
+    # The entity id is its identity and does not move; the friendly name does.
+    assert (
+        hass.states.get("climate.bedroom").attributes["friendly_name"] == "Guest room"
+    )
+
+
+async def test_a_room_given_a_different_sensor_stops_watching_the_old_one(
+    hass: HomeAssistant,
+):
+    """A room that kept listening to the sensor it was taken off would look
+    exactly like one ignoring the change."""
+    hass.states.async_set("sensor.old", "21.0")
+    hass.states.async_set("sensor.new", "21.0")
+    hass.states.async_set("switch.radiator", "off")
+    _, store = await _house(hass)
+    room = await store.async_add_room(
+        {"name": "Bedroom", "temperature_sensor": "sensor.old",
+         "heaters": ["switch.radiator"]}
+    )
+    await hass.async_block_till_done()
+    await store.async_update_room(room.id, {"temperature_sensor": "sensor.new"})
+    await hass.async_block_till_done()
+
+    hass.states.async_set("sensor.new", "18.5")
+    await hass.async_block_till_done()
+    assert hass.states.get("climate.bedroom").attributes["current_temperature"] == 18.5

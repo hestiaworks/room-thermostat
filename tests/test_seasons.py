@@ -15,6 +15,7 @@ from custom_components.room_thermostat.config_flow import default_options, seaso
 from custom_components.room_thermostat.const import (
     CONF_DAMPING_HOURS,
     CONF_ENTRY_TYPE,
+    ENTRY_HUB,
     CONF_HEAT_LIMIT,
     CONF_HEATERS,
     CONF_OUTDOOR_SENSOR,
@@ -36,18 +37,35 @@ def seasons(hass: HomeAssistant, **options) -> MockConfigEntry:
     return entry
 
 
-def room(hass: HomeAssistant, name: str = "Bedroom") -> MockConfigEntry:
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title=name,
-        data={
-            "name": name,
-            CONF_TEMPERATURE_SENSOR: f"sensor.{name.lower()}_temperature",
-            CONF_HEATERS: ["switch.radiator"],
-        },
-        options=default_options(),
+async def room(hass: HomeAssistant, name: str = "Bedroom") -> MockConfigEntry:
+    """A house with one room in the record.
+
+    A room is a line in the hub's record now rather than a config entry of its
+    own, so a test that wants a room wants a hub.
+    """
+    entry = next(
+        (
+            existing
+            for existing in hass.config_entries.async_entries(DOMAIN)
+            if existing.data.get(CONF_ENTRY_TYPE) == ENTRY_HUB
+        ),
+        None,
     )
-    entry.add_to_hass(hass)
+    if entry is None:
+        entry = MockConfigEntry(
+            domain=DOMAIN, title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
+        )
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    await hass.data[DOMAIN]["store"].async_add_room(
+        {
+            "name": name,
+            "temperature_sensor": f"sensor.{name.lower()}_temperature",
+            "heaters": ["switch.radiator"],
+        }
+    )
+    await hass.async_block_till_done()
     return entry
 
 
@@ -132,34 +150,16 @@ def _seasons_entries(hass: HomeAssistant) -> list:
     ]
 
 
-async def test_setting_up_a_room_brings_the_seasons_entry_into_being(
-    hass: HomeAssistant,
-):
-    hass.states.async_set("sensor.bedroom_temperature", "21.0")
-    entry = room(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    assert len(_seasons_entries(hass)) == 1
-
-
-async def test_two_rooms_do_not_bring_two(hass: HomeAssistant):
-    """Setting the component up sets up every room at once, which is exactly
-    the race the request has to survive."""
-    hass.states.async_set("sensor.bedroom_temperature", "21.0")
-    hass.states.async_set("sensor.kitchen_temperature", "21.0")
-    first, second = room(hass), room(hass, "Kitchen")
-    await hass.config_entries.async_setup(first.entry_id)
-    await hass.async_block_till_done()
-    assert str(second.state) == "ConfigEntryState.LOADED"  # alongside the first
-    assert len(_seasons_entries(hass)) == 1
+# Two tests stood here, checking that setting up a room entry conjured a
+# Seasons entry into being. A room is not a config entry any more, so nothing
+# triggers that machinery; it becomes the hub's own migration in due course,
+# and is tested there.
 
 
 async def test_a_house_that_already_has_one_gains_no_second(hass: HomeAssistant):
     hass.states.async_set("sensor.bedroom_temperature", "21.0")
     seasons(hass)
-    entry = room(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await room(hass)
     assert len(_seasons_entries(hass)) == 1
 
 
@@ -343,9 +343,7 @@ async def test_a_room_with_no_seasons_entry_behaves_as_before(hass: HomeAssistan
     """The upgrade path: a room is unchanged until a source is chosen."""
     hass.states.async_set("sensor.bedroom_temperature", "20.0")
     hass.states.async_set("switch.radiator", "off")
-    entry = room(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await room(hass)
     await _heat_to(hass, 22.0)
     assert hass.states.get("climate.bedroom").attributes["hvac_action"] == "heating"
 
@@ -354,9 +352,7 @@ async def test_a_seasons_entry_with_no_source_changes_nothing(hass: HomeAssistan
     hass.states.async_set("sensor.bedroom_temperature", "20.0")
     hass.states.async_set("switch.radiator", "off")
     seasons(hass)
-    entry = room(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await room(hass)
     await _heat_to(hass, 22.0)
     assert hass.states.get("climate.bedroom").attributes["hvac_action"] == "heating"
 
@@ -368,9 +364,7 @@ async def test_out_of_season_a_room_stops_heating_and_says_why(
     hass.states.async_set("switch.radiator", "off")
     hass.states.async_set("sensor.outdoor", "22.0")
     seasons(hass, **{CONF_OUTDOOR_SENSOR: "sensor.outdoor"})
-    entry = room(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await room(hass)
     await _heat_to(hass, 22.0)
     # It takes the dwell for the house to decide it is out of season.
     await _advance(hass, freezer, hours=7)
@@ -385,9 +379,7 @@ async def test_out_of_season_a_cold_room_still_heats(hass: HomeAssistant, freeze
     hass.states.async_set("switch.radiator", "off")
     hass.states.async_set("sensor.outdoor", "22.0")
     seasons(hass, **{CONF_OUTDOOR_SENSOR: "sensor.outdoor"})
-    entry = room(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await room(hass)
     await _heat_to(hass, 22.0)
     await _advance(hass, freezer, hours=7)
 
@@ -414,9 +406,7 @@ async def test_a_renamed_season_sensor_is_still_obeyed(
     )
     await hass.async_block_till_done()
 
-    entry = room(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await room(hass)
     await _heat_to(hass, 22.0)
     await _advance(hass, freezer, hours=7)
 

@@ -35,6 +35,7 @@ from homeassistant.util.unit_conversion import TemperatureConverter
 
 from . import entry_type
 from .control import damp, in_season, settled
+from .store import RoomStore
 from .const import (
     CONF_COOL_LIMIT,
     CONF_COOL_LIMIT_HYSTERESIS,
@@ -44,10 +45,12 @@ from .const import (
     CONF_OUTDOOR_SENSOR,
     CONF_SEASON_DWELL,
     DOMAIN,
+    ENTRY_HUB,
     ENTRY_SEASONS,
     OUTDOOR_LOST_SECONDS,
     SANE_OUTDOOR,
     SIGNAL_DEMAND,
+    SIGNAL_ROOMS,
 )
 
 # The loop is driven by the source reporting, but the average has to keep
@@ -61,32 +64,54 @@ async def async_setup_entry(
     if entry_type(entry) == ENTRY_SEASONS:
         async_add_entities([HeatingSeason(entry), CoolingSeason(entry)])
         return
-    async_add_entities([HeatDemand(entry)])
+    if entry_type(entry) != ENTRY_HUB:
+        return
+
+    store: RoomStore = hass.data[DOMAIN]["store"]
+    known: dict[str, HeatDemand] = {}
+
+    @callback
+    def _sync() -> None:
+        wanted = {room.id for room in store.rooms}
+        added = [HeatDemand(hass, room_id) for room_id in wanted - known.keys()]
+        for entity in added:
+            known[entity.room_id] = entity
+        if added:
+            async_add_entities(added)
+        for room_id in list(known.keys() - wanted):
+            entity = known.pop(room_id)
+            hass.async_create_task(entity.async_remove(force_remove=True))
+
+    _sync()
+    entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_ROOMS, _sync))
 
 
 class HeatDemand(BinarySensorEntity):
     # Named explicitly, for the same reason as the thermostat.
     _attr_has_entity_name = False
+    _attr_should_poll = False
 
-    def __init__(self, entry: ConfigEntry) -> None:
-        self._entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_heat_demand"
-        self._attr_name = f"{entry.title} heat demand"
+    def __init__(self, hass: HomeAssistant, room_id: str) -> None:
+        self.hass = hass
+        self.room_id = room_id
+        room = hass.data[DOMAIN]["store"].room(room_id)
+        self._attr_unique_id = f"{room_id}_heat_demand"
+        self._attr_name = f"{room.name} heat demand"
         self._attr_is_on = False
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
+            identifiers={(DOMAIN, room_id)},
+            name=room.name,
             manufacturer="Room Thermostat",
         )
 
     async def async_added_to_hass(self) -> None:
         self._attr_is_on = bool(
-            self.hass.data[DOMAIN][self._entry.entry_id].get("demand")
+            self.hass.data[DOMAIN].get(self.room_id, {}).get("demand")
         )
 
         @callback
-        def _demand(entry_id: str, demand: bool) -> None:
-            if entry_id != self._entry.entry_id:
+        def _demand(room_id: str, demand: bool) -> None:
+            if room_id != self.room_id:
                 return
             self._attr_is_on = demand
             self.async_write_ha_state()
