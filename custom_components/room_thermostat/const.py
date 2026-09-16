@@ -85,3 +85,13 @@ DEFAULT_SEASON_OVERRIDE = 4.0
 SANE_OUTDOOR = (-50.0, 60.0)
 # How long an outdoor source may be missing before a human is told.
 OUTDOOR_LOST_SECONDS = 3600.0
+
+# --- the record the page edits -------------------------------------------
+
+STORE_KEY = "room_thermostat.rooms"
+STORE_VERSION = 1
+
+# The set of rooms changed: something has to be built or taken away.
+SIGNAL_ROOMS = "room_thermostat_rooms"
+# One room's settings changed, by id. Its entities re-read and re-subscribe.
+SIGNAL_ROOM = "room_thermostat_room"
