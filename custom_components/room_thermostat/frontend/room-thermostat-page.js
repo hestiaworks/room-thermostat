@@ -382,7 +382,11 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .room-card .reading small { font:400 13px/1 var(--font); color:var(--muted); }
 .room-card .controls { display:flex; gap:var(--s2); }
 .room-card .controls select { flex:1; min-width:0; }
-.room-card .controls input { width:5.5em; flex:none; }
+.room-card .controls .setpoint { position:relative; flex:none; width:6.5em; }
+.room-card .controls .setpoint input { width:100%; padding-right:2.2em; }
+.room-card .controls .setpoint span { position:absolute; right:var(--s3); top:50%;
+  transform:translateY(-50%); color:var(--muted); font:400 13px/1 var(--font);
+  pointer-events:none; }
 .room-card footer { margin-top:auto; display:flex; align-items:center; gap:var(--s3); }
 
 /* State is a fill, never an outline colour. */
@@ -391,7 +395,7 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .doing::before { content:""; width:8px; height:8px; flex:none; background:var(--disabled); }
 .doing.heating { color:var(--ink); } .doing.heating::before { background:var(--accent); }
 .doing.cooling { color:var(--ink); } .doing.cooling::before { background:var(--info, #5B9DD9); }
-.doing .why { color:var(--muted); font-weight:400; }
+.doing .why { color:var(--muted); font-weight:400; margin-left:var(--s2); }
 
 .add-card { border:1px dashed var(--line); background:transparent; color:var(--muted);
   min-height:120px; }
@@ -509,6 +513,18 @@ const PROBLEMS = {
     "That is one of this integration's own entities — a room set to drive it would drive itself.",
   no_devices:
     "A room that can neither heat nor cool is a thermometer. Give it an air conditioner, a heater, or both.",
+};
+
+/** What a room is doing, in words rather than identifiers. */
+const ACTIONS = {
+  idle: "Idle", heating: "Heating", cooling: "Cooling",
+  drying: "Drying", fan: "Fan", off: "Off",
+};
+
+/** Home Assistant's mode names, in words rather than identifiers. */
+const MODES = {
+  off: "Off", heat: "Heat", cool: "Cool", heat_cool: "Auto",
+  dry: "Dry", fan_only: "Fan",
 };
 
 const TABS = [
@@ -702,9 +718,114 @@ class RoomThermostatPage extends HTMLElement {
 
   // --- the tabs, each arriving in its own turn -------------------------
 
+  /**
+   * The thermostat entity for a room.
+   *
+   * Matched on the room id it publishes, not on its name: two rooms may be
+   * named alike, and a room being renamed would lose its card mid-edit.
+   */
+  climateOf(room) {
+    return Object.values(this._hass?.states || {}).find(
+      (state) =>
+        state.entity_id?.startsWith("climate.") &&
+        state.attributes?.room_id === room.id,
+    ) || null;
+  }
+
+  liveOf(room) {
+    const state = this.climateOf(room);
+    if (!state) return { missing: true };
+    const attributes = state.attributes || {};
+    const action = attributes.hvac_action || "idle";
+    // Why it is doing nothing. "idle" on its own is what made the season
+    // lockout look like a fault rather than a decision.
+    let why = "";
+    if (action === "idle" && state.state === "heat" && attributes.heating_season === false) {
+      why = "out of heating season";
+    } else if (action === "idle" && state.state === "cool" && attributes.cooling_season === false) {
+      why = "out of cooling season";
+    }
+    return {
+      entityId: state.entity_id,
+      mode: state.state,
+      modes: attributes.hvac_modes || [],
+      temperature: attributes.current_temperature,
+      humidity: attributes.current_humidity,
+      target: attributes.temperature,
+      action,
+      why,
+    };
+  }
+
+  roomCard(room) {
+    const live = this.liveOf(room);
+    if (live.missing) {
+      return `<article class="room-card">
+        <header><span class="name">${escapeHtml(room.name)}</span></header>
+        <p class="muted">No reading — this room's thermostat has not started.</p>
+        <footer><button data-open="${room.id}">Settings</button></footer>
+      </article>`;
+    }
+    const reading = live.temperature === undefined || live.temperature === null
+      ? `<span class="muted">No reading</span>`
+      : `${Number(live.temperature).toFixed(1)} °C`;
+    const humidity = live.humidity === undefined || live.humidity === null
+      ? ""
+      : `<small>${Math.round(live.humidity)} %</small>`;
+    return `<article class="room-card">
+      <header><span class="name">${escapeHtml(room.name)}</span></header>
+      <p class="reading">${reading} ${humidity}</p>
+      <div class="controls">
+        <select data-mode="${room.id}" aria-label="Mode">
+          ${live.modes.map((mode) =>
+            `<option value="${mode}" ${mode === live.mode ? "selected" : ""}>${MODES[mode] || mode}</option>`).join("")}
+        </select>
+        <label class="setpoint">
+          <input type="number" step="0.5" data-target="${room.id}" aria-label="Setpoint"
+                 value="${live.target ?? ""}" ${live.target === undefined || live.target === null ? "disabled" : ""}>
+          <span>°C</span>
+        </label>
+      </div>
+      <p class="doing ${live.action}">${ACTIONS[live.action] || live.action}${live.why ? `<span class="why">· ${live.why}</span>` : ""}</p>
+      <footer><button data-open="${room.id}">Settings</button></footer>
+    </article>`;
+  }
+
   roomsTab() {
-    return `<div class="page-head"><h1>Rooms</h1></div>
-      <p class="muted">The cards arrive next.</p>`;
+    if (!this.rooms.length) {
+      return `<div class="empty">
+        <h2>No rooms yet</h2>
+        <p>A room is a temperature sensor and whatever heats or cools it.</p>
+        <button class="primary" data-add-room>Add a room</button>
+      </div>`;
+    }
+    return `<div class="page-head">
+        <h1>Rooms</h1>
+        <p>What each room reads, what it is set to, and what it is doing.</p>
+      </div>
+      <div class="room-grid">
+        ${this.rooms.map((room) => this.roomCard(room)).join("")}
+        <button class="add-card" data-add-room>+ Add a room</button>
+      </div>`;
+  }
+
+  async setMode(roomId, mode) {
+    // A command, not a setting: it takes effect now and is not drafted.
+    const live = this.liveOf(this.rooms.find((room) => room.id === roomId) || {});
+    if (!live.entityId) return;
+    await this._hass.callService("climate", "set_hvac_mode", {
+      entity_id: live.entityId,
+      hvac_mode: mode,
+    });
+  }
+
+  async setTarget(roomId, value) {
+    const live = this.liveOf(this.rooms.find((room) => room.id === roomId) || {});
+    if (!live.entityId || value === "" || Number.isNaN(Number(value))) return;
+    await this._hass.callService("climate", "set_temperature", {
+      entity_id: live.entityId,
+      temperature: Number(value),
+    });
   }
 
   roomEditor() {
@@ -723,10 +844,6 @@ class RoomThermostatPage extends HTMLElement {
   }
 
   async loadHistory() {}
-
-  async setMode() {}
-
-  async setTarget() {}
 
   async saveRoom() {}
 

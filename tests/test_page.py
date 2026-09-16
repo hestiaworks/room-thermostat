@@ -78,3 +78,43 @@ def test_no_chart_library_is_loaded(source: str):
     releases, and a CDN is not reachable from plenty of installs."""
     assert "import(" not in source
     assert "cdn" not in source.lower()
+
+
+# --- the rooms tab -------------------------------------------------------
+
+
+def test_every_room_is_drawn_from_the_record_not_from_a_copy(source: str):
+    """A card built from a stale copy shows a room that no longer exists."""
+    assert "this.rooms.map" in source
+
+
+def test_live_values_come_from_the_state_machine(source: str):
+    """Current temperature and mode are entity state. A command for them would
+    be a slower copy of something already in the browser."""
+    assert "room_thermostat/rooms/state" not in source
+    assert "this._hass?.states" in source or "this._hass.states" in source
+
+
+def test_a_card_joins_its_room_by_id_rather_than_by_name(source: str):
+    """Two rooms may be named alike, and a room being renamed would otherwise
+    lose its card mid-edit."""
+    assert "attributes?.room_id === room.id" in source
+
+
+def test_a_card_says_why_a_room_is_idle(source: str):
+    """"idle" alone is what made the season lockout look like a fault."""
+    assert "out of heating season" in source
+    assert "out of cooling season" in source
+
+
+def test_mode_and_setpoint_are_commands_rather_than_settings(source: str):
+    """Changing a mode is not an edit to the record, so it must not be drafted
+    or wait for a save."""
+    assert '"set_hvac_mode"' in source
+    assert '"set_temperature"' in source
+    commands = source[source.index("async setMode(") : source.index("roomEditor()")]
+    assert "this.draft" not in commands
+
+
+def test_a_room_with_no_reading_says_so_rather_than_drawing_nothing(source: str):
+    assert "No reading" in source
