@@ -327,3 +327,48 @@ def test_a_room_that_is_off_is_not_counted_as_held_back(source: str):
 def test_the_what_if_table_replays_the_window_against_other_limits(source: str):
     assert "whatIf(model)" in source
     assert "dwell ignored" in source
+
+
+# --- drawn to the design, not near it ------------------------------------
+
+
+def test_every_tab_shares_one_container(source: str):
+    """The design gives all four screens the same 1180 px and the same 32 px
+    of padding. Two tabs at different widths is the thing that reads as
+    unfinished."""
+    assert ".page { padding:32px; max-width:1180px; margin:0 auto; }" in source
+    assert "page wide" not in source
+    assert "max-width:1680px" not in source
+
+
+def test_the_history_page_is_a_column_with_one_gap(source: str):
+    """The design separates its blocks with a 26 px column gap rather than
+    with margins on each block."""
+    assert ".page.stack { display:flex; flex-direction:column; gap:26px; }" in source
+    assert '<div class="page stack">' in source
+
+
+def test_a_heading_inside_a_column_carries_no_margin_of_its_own(source: str):
+    """It would add to the gap that already separates it."""
+    assert ".column .page-head { margin-bottom:0; }" in source
+
+
+def test_save_and_revert_live_in_the_app_bar(source: str):
+    """Where the design puts them: the state, then Revert, then Save, on
+    every screen that has something to save."""
+    chrome = source[source.index("renderChrome() {") : source.index("bindChrome(root)")]
+    assert "save-bar" in chrome
+    assert "Revert" in chrome
+    assert "Save room" in chrome and "Save the house" in chrome
+    body = source[source.index("roomEditor() {") : source.index("roomInspector(")]
+    assert "Save room" not in body
+
+
+def test_the_corner_says_the_season_when_there_is_nothing_to_save(source: str):
+    chrome = source[source.index("renderChrome() {") : source.index("bindChrome(root)")]
+    assert "this.seasonWord()" in chrome
+
+
+def test_the_chosen_range_is_a_primary_button(source: str):
+    """The design fills it with the accent rather than tinting it."""
+    assert 'data-span="${span}" class="${span === this.span ? "primary" : ""}"' in source

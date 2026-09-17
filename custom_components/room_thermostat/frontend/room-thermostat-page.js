@@ -371,7 +371,12 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
    ============================================================ */
 
 .page { padding:32px; max-width:1180px; margin:0 auto; }
-.page.wide { max-width:1680px; }
+/* The history page is a column of blocks 26px apart, not a stack of elements
+   carrying their own margins. */
+.page.stack { display:flex; flex-direction:column; gap:26px; }
+/* Inside a column the gap already separates the heading from the first
+   group; its own margin would add to it. */
+.page.stack .page-head, .column .page-head { margin-bottom:0; }
 .page-head h1 { font:700 30px/1.1 var(--font); margin:0; }
 .page-head p { font:400 14px/1.5 var(--font); color:var(--muted); margin-top:4px; max-width:720px; }
 .page-head { display:flex; align-items:flex-end; gap:20px; margin-bottom:20px; }
@@ -459,6 +464,7 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 
 /* History */
 .ranges { display:flex; gap:8px; }
+.ranges button { height:28px; padding:0 14px; font:600 13px/1 var(--font); }
 .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border:1px solid var(--line); }
 .summary > div { padding:14px 16px; }
 .summary > div + div { border-left:1px solid var(--line); }
@@ -524,7 +530,11 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
   padding:6px 1.9% 0 6.9%; font:400 11px/1 var(--font); color:var(--muted); }
 .signature-plot .after { font:400 11px/1.4 var(--font); color:var(--muted); margin-top:10px; }
 
-.actions-bar { display:flex; align-items:center; gap:12px; }
+.save-bar { display:flex; align-items:center; gap:8px; }
+.save-bar .save-state { margin-right:4px; }
+.save-bar button[disabled] { color:var(--disabled); cursor:default; }
+.save-bar button.primary[disabled] { background:var(--surface); border-color:var(--line);
+  color:var(--disabled); }
 button.quiet { background:transparent; border-color:transparent; color:var(--muted); }
 button.quiet:hover { background:var(--surface-raised); color:var(--ink); }
 button.quiet.tiny { height:auto; padding:0 4px; font-size:11px; }
@@ -570,6 +580,13 @@ line.crosshair { stroke:var(--ink); stroke-width:1; opacity:.55; }
 }
 @media (max-width:600px) {
   .page { padding:20px 12px 32px; }
+  /* The design is drawn for a desk. On a phone the state text is the part of
+     the save bar worth losing: the buttons say the same thing. */
+  .save-bar .save-state { display:none; }
+  .save-bar button { padding:0 10px; }
+  .app-bar { padding-left:12px; padding-right:12px; gap:8px; }
+  .tabs { padding:0 12px; }
+  .crumbs .here { font-size:14px; }
   .page-head { flex-direction:column; align-items:stretch; gap:12px; }
   .page-head h1 { font-size:22px; }
   .row-setting { flex-direction:column; align-items:stretch; }
@@ -714,6 +731,7 @@ class RoomThermostatPage extends HTMLElement {
     this.tab = TABS.some(([key]) => key === tab) ? tab : "rooms";
     this.editing = id || null;
     this.problems = {};
+    this.draftDirty = id === "new";
     this.draft = id
       ? id === "new"
         ? { name: "", cooling_strategy: "gated", frost_temperature: 5 }
@@ -764,10 +782,21 @@ class RoomThermostatPage extends HTMLElement {
     this.renderBody();
   }
 
+  /** Whether what is on screen has anything to save. */
+  dirty() {
+    if (this.editing) return this.draftDirty === true;
+    if (this.tab === "house") return this.draftHouse !== null;
+    return false;
+  }
+
   renderChrome() {
     const bar = this.shadowRoot.querySelector("[data-chrome]");
     const tabs = this.shadowRoot.querySelector("[data-tabs]");
     if (!bar || !tabs) return;
+    // The save bar belongs to a room and to the house; everywhere else that
+    // corner says what the season is doing.
+    const showSave = Boolean(this.editing) || this.tab === "house";
+    const dirty = this.dirty();
     bar.innerHTML = `<span class="mark"></span>
       <nav class="crumbs">
         ${this.editing
@@ -777,7 +806,14 @@ class RoomThermostatPage extends HTMLElement {
           : `<span class="here">Room Thermostat</span>`}
       </nav>
       <span class="spacer"></span>
-      ${this.error ? `<span class="save-state dirty">${escapeHtml(this.error)}</span>` : ""}`;
+      ${this.error ? `<span class="save-state dirty">${escapeHtml(this.error)}</span>` : ""}
+      ${showSave ? `<div class="save-bar">
+          <span class="save-state ${dirty ? "dirty" : ""}">${dirty ? "Unsaved changes" : "No unsaved changes"}</span>
+          <button data-revert ${dirty ? "" : "disabled"}>Revert</button>
+          <button class="primary" data-save ${dirty && !this.busy ? "" : "disabled"}>${
+            this.editing ? (this.draft?.id ? "Save room" : "Add room") : "Save the house"}</button>
+        </div>`
+        : `<span class="save-state">${escapeHtml(this.seasonWord())}</span>`}`;
     tabs.hidden = Boolean(this.editing);
     tabs.innerHTML = this.editing ? "" : TABS.map(([key, label]) =>
       `<button data-go="#${key}" class="${key === this.tab ? "active" : ""}">${label}</button>`).join("");
@@ -786,6 +822,21 @@ class RoomThermostatPage extends HTMLElement {
   }
 
   bindChrome(root) {
+    root.querySelectorAll("[data-save]").forEach((node) =>
+      node.addEventListener("click", () => {
+        if (this.editing) this.saveRoom();
+        else this.saveHouse();
+      }));
+    root.querySelectorAll("[data-revert]").forEach((node) =>
+      node.addEventListener("click", () => {
+        if (this.editing) {
+          this.draft = { ...this.rooms.find((room) => room.id === this.editing) };
+          this.draftDirty = false;
+        } else {
+          this.draftHouse = null;
+        }
+        this.renderBody();
+      }));
     root.querySelectorAll("[data-go]").forEach((node) => {
       node.addEventListener("click", (event) => {
         event.preventDefault();
@@ -926,7 +977,7 @@ class RoomThermostatPage extends HTMLElement {
         </div></div>
       </div>`;
     }
-    return `<div class="page wide">
+    return `<div class="page">
       <div class="page-head">
         <div class="grow"><h1>Rooms</h1>
           <p>What each room reads, what it is set to, and what it is doing.</p></div>
@@ -1131,11 +1182,6 @@ class RoomThermostatPage extends HTMLElement {
             this.numberBox("frost_temperature", draft.frost_temperature ?? 5, "°C"))}
         </div></div>
 
-        <div class="actions-bar">
-          <button class="primary" data-save-room ${this.busy ? "disabled" : ""}>${isNew ? "Add room" : "Save room"}</button>
-          <button data-go="#rooms">Cancel</button>
-        </div>
-
         ${isNew ? "" : `<div class="group danger-group"><div class="label">Danger zone</div><div class="rows">
           ${this.settingRow("Delete this room",
             "", `<button class="danger" data-delete>Delete room</button>`)}
@@ -1236,7 +1282,6 @@ class RoomThermostatPage extends HTMLElement {
 
   houseTab() {
     const house = this.draftHouse || this.house;
-    const dirty = this.draftHouse !== null;
     const limit = Number(house.heat_limit);
     const damped = this.dampedNow();
     return `<div class="page split">
@@ -1282,11 +1327,6 @@ class RoomThermostatPage extends HTMLElement {
             this.numberBox("cool_override", house.cool_override, "K"))}
         </div></div>
 
-        <div class="actions-bar">
-          <button class="primary" data-save-house ${this.busy || !dirty ? "disabled" : ""}>Save the house</button>
-          ${dirty ? `<button data-revert-house>Revert</button>`
-                  : `<span class="save-state">No unsaved changes</span>`}
-        </div>
       </div>
 
       <div class="column" data-inspector>
@@ -1405,11 +1445,11 @@ class RoomThermostatPage extends HTMLElement {
     const value = field.type === "checkbox" ? field.checked : field.value;
     if (this.tab === "house" && !this.editing) {
       this.draftHouse = { ...(this.draftHouse || this.house), [field.name]: value };
-      const save = this.shadowRoot.querySelector("[data-save-house]");
-      if (save) save.disabled = false;
     } else {
       this.draft = { ...(this.draft || {}), [field.name]: value };
+      this.draftDirty = true;
     }
+    this.renderChrome();
   }
 
   /** What a picker chose, into whichever draft is open. */
@@ -1418,11 +1458,13 @@ class RoomThermostatPage extends HTMLElement {
       const current = this.draft?.heaters || [];
       if (!current.includes(entityId)) {
         this.draft = { ...this.draft, heaters: [...current, entityId] };
+        this.draftDirty = true;
       }
     } else if (this.tab === "house" && !this.editing) {
       this.draftHouse = { ...(this.draftHouse || this.house), [name]: entityId };
     } else {
       this.draft = { ...(this.draft || {}), [name]: entityId };
+      this.draftDirty = true;
     }
     this.picking = null;
     this.renderBody();
@@ -1670,9 +1712,9 @@ class RoomThermostatPage extends HTMLElement {
   historyTab() {
     const ranges = ["24h", "7d", "30d", "90d"];
     const picker = `<div class="ranges">${ranges.map((span) =>
-      `<button data-span="${span}" class="${span === this.span ? "active" : ""}">${span}</button>`).join("")}</div>`;
+      `<button data-span="${span}" class="${span === this.span ? "primary" : ""}">${span}</button>`).join("")}</div>`;
     if (!this.history) {
-      return `<div class="page wide">
+      return `<div class="page stack">
         <div class="page-head"><div class="grow"><h1>History</h1></div></div>
         ${picker}<p class="muted">Reading the history…</p></div>`;
     }
@@ -1691,7 +1733,7 @@ class RoomThermostatPage extends HTMLElement {
     const margin = damped === null ? "no reading yet"
       : `${number(Math.abs(damped - model.limit))} K ${damped > model.limit ? "above" : "below"} the limit`;
 
-    return `<div class="page wide">
+    return `<div class="page stack">
       <div class="page-head"><div class="grow"><h1>History</h1>
         <p>Three lanes on one time axis: the weather and the season decision it drives,
         what each room did about it, and when equipment actually ran. The band is the
@@ -1920,15 +1962,6 @@ class RoomThermostatPage extends HTMLElement {
         const key = node.dataset.series;
         if (this.hiddenSeries.has(key)) this.hiddenSeries.delete(key);
         else this.hiddenSeries.add(key);
-        this.renderBody();
-      }));
-    root.querySelectorAll("[data-save-room]").forEach((node) =>
-      node.addEventListener("click", () => this.saveRoom()));
-    root.querySelectorAll("[data-save-house]").forEach((node) =>
-      node.addEventListener("click", () => this.saveHouse()));
-    root.querySelectorAll("[data-revert-house]").forEach((node) =>
-      node.addEventListener("click", () => {
-        this.draftHouse = null;
         this.renderBody();
       }));
     root.querySelectorAll("[data-delete]").forEach((node) =>
