@@ -404,3 +404,21 @@ def test_the_explanation_carries_this_houses_own_numbers(source: str):
     for value in ("house.damping_hours", "house.season_dwell_hours",
                   "number(house.heat_limit)", "number(house.heat_override)"):
         assert value in explainer
+
+
+def test_the_run_strips_draw_every_block_not_only_the_filled_ones(source: str):
+    """An empty row reads as a chart that failed rather than as a week in
+    which nothing ran — which, in September, is the answer."""
+    assert "blocksOf(flags, count)" in source
+    assert '"#1A1F24"' in source and '"#8A4A16"' in source
+    assert "length: total" in source
+
+
+def test_the_season_is_the_first_run_strip(source: str):
+    strips = source[source.index("strips(model) {") : source.index("stripNote(model) {")]
+    assert 'label: "Heating season"' in strips
+
+
+def test_the_strip_caption_says_what_a_block_is_worth(source: str):
+    assert "One block =" in source
+    assert "Nothing ran — the season held everything idle." in source

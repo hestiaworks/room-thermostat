@@ -1817,6 +1817,54 @@ class RoomThermostatPage extends HTMLElement {
     };
   }
 
+  /*
+   * Forty-eight blocks per row, whatever the span, and every one of them
+   * drawn.
+   *
+   * Only marking the blocks where something ran left an empty row that read
+   * as a chart that had failed rather than as a week in which nothing ran —
+   * which, in September, is the answer.
+   */
+  blocksOf(flags, count) {
+    const total = 48;
+    const per = count / total;
+    return Array.from({ length: total }, (_, block) => {
+      let on = false;
+      for (let i = Math.floor(block * per); i < Math.floor((block + 1) * per); i += 1) {
+        if (flags[i]) on = true;
+      }
+      return { x: (block * 20.83).toFixed(1), fill: on ? "#8A4A16" : "#1A1F24" };
+    });
+  }
+
+  strips(model) {
+    const share = (hours) => Math.round((hours / Math.max(0.01, model.hours)) * 100);
+    const seasonHours = model.inSeason.filter(Boolean).length * model.perBucket;
+    return [
+      {
+        label: "Heating season",
+        blocks: this.blocksOf(model.inSeason, model.count),
+        share: share(seasonHours),
+      },
+      ...model.rooms.map((room) => ({
+        label: room.name,
+        blocks: this.blocksOf(room.ran, model.count),
+        share: share(room.ranHours),
+      })),
+    ];
+  }
+
+  stripNote(model) {
+    const each = model.hours / 48;
+    const size = each < 1
+      ? `One block = ${Math.round(each * 60)} min.`
+      : `One block = ${each.toFixed(1).replace(".0", "")} h.`;
+    const ran = model.rooms.reduce((total, room) => total + room.ranHours, 0);
+    return ran < 1
+      ? `${size} Nothing ran — the season held everything idle.`
+      : `${size} Filled means the room called for heat; the top row is the season itself.`;
+  }
+
   historyTab() {
     const ranges = ["24h", "7d", "30d", "90d"];
     const picker = `<div class="ranges">${ranges.map((span) =>
@@ -1900,14 +1948,12 @@ class RoomThermostatPage extends HTMLElement {
         </div>
 
         <div class="lane-cap">3 · When it ran
-          <span class="aside">one cell per bucket</span></div>
-        ${model.rooms.map((room) => `<div class="strip">
-          <span class="naming"><b>${escapeHtml(room.name)}</b><small>${room.ranShare} %</small></span>
+          <span class="aside">${escapeHtml(this.stripNote(model))}</span></div>
+        ${this.strips(model).map((strip) => `<div class="strip">
+          <span class="naming"><b>${escapeHtml(strip.label)}</b><small>${strip.share} %</small></span>
           <span class="plot"><svg viewBox="0 0 1000 16" preserveAspectRatio="none" style="height:16px">
-            ${room.ran.map((on, index) => on
-              ? `<rect x="${((index / model.count) * 1000).toFixed(1)}" y="0"
-                       width="${(1000 / model.count).toFixed(1)}" height="16" fill="var(--accent)"></rect>`
-              : "").join("")}
+            ${strip.blocks.map((block) =>
+              `<rect x="${block.x}" y="0" width="18" height="16" fill="${block.fill}"></rect>`).join("")}
           </svg></span>
         </div>`).join("")}
 
