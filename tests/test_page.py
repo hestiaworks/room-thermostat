@@ -372,3 +372,35 @@ def test_the_corner_says_the_season_when_there_is_nothing_to_save(source: str):
 def test_the_chosen_range_is_a_primary_button(source: str):
     """The design fills it with the accent rather than tinting it."""
     assert 'data-span="${span}" class="${span === this.span ? "primary" : ""}"' in source
+
+
+def test_the_add_cell_finishes_the_row_it_lands_on(source: str):
+    """Three rooms in three columns put it alone on a second row and left two
+    thirds of that row as an empty bordered box."""
+    assert "fitAddCell()" in source
+    assert "gridTemplateColumns" in source
+    assert "ResizeObserver" in source
+
+
+def test_every_unit_label_is_one_width(source: str):
+    """The design sizes each to its own word — "hours" is twice "K" — which
+    leaves the inputs above and below each other out of line."""
+    assert ".row-setting .unit" in source
+    assert "width:44px; flex:none;" in source
+
+
+def test_the_house_explains_the_whole_decision_in_words(source: str):
+    """Every number on that page is one clause of a sentence nobody ever
+    writes down."""
+    assert "howItWorks()" in source
+    assert "A room asks first" in source
+    assert "The house answers second" in source
+    assert "Two things overrule all of it" in source
+
+
+def test_the_explanation_carries_this_houses_own_numbers(source: str):
+    """A worked example with somebody else's thresholds in it is a manual."""
+    explainer = source[source.index("howItWorks() {") : source.index("// --- writing")]
+    for value in ("house.damping_hours", "house.season_dwell_hours",
+                  "number(house.heat_limit)", "number(house.heat_override)"):
+        assert value in explainer

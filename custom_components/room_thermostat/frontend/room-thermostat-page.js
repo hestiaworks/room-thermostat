@@ -403,7 +403,11 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .row-setting input[type=text], .row-setting input[type=number] { height:36px; width:96px;
   padding:0 12px; font:500 13px/1 var(--mono); text-align:center; }
 .row-setting input.wide { width:220px; text-align:left; font:400 14px/1 var(--font); }
-.row-setting .unit { font:400 13px/1 var(--font); color:var(--muted); min-width:20px; }
+/* One width for every unit, so the inputs above and below each other line
+   up. The design sizes each to its own word — "hours" is twice "K" — which
+   leaves the column ragged. */
+.row-setting .unit { font:400 13px/1 var(--font); color:var(--muted);
+  width:44px; flex:none; }
 .row-setting .select-wrap { flex:0 0 260px; }
 
 /* Rooms */
@@ -438,6 +442,8 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .room-cell .actions { display:flex; gap:8px; margin-top:auto; }
 .add-cell { border-left:1px solid var(--line); border-top:1px solid var(--line);
   margin:-1px 0 0 -1px; padding:20px; display:grid; place-items:center; }
+/* A cell that has stretched across a row does not need a room's height. */
+.add-cell.spanning button { min-height:120px; }
 .add-cell button { width:100%; height:100%; min-height:196px; display:flex; flex-direction:column;
   align-items:center; justify-content:center; gap:8px; border:1px dashed var(--disabled);
   background:transparent; color:var(--muted); }
@@ -460,6 +466,10 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .inspector .note { border:0; border-top:1px solid var(--line); }
 .aside-note { font:400 13px/1.5 var(--font); color:var(--muted); }
 .danger-group > .label { color:var(--danger); }
+.explainer .prose { padding:16px; }
+.explainer .prose p { font:400 14px/1.65 var(--font); color:var(--muted); max-width:70ch; }
+.explainer .prose p + p { margin-top:14px; }
+.explainer .prose b { color:var(--ink); font-weight:600; }
 .danger-group { padding-top:26px; border-top:1px solid var(--line); }
 
 /* History */
@@ -853,6 +863,7 @@ class RoomThermostatPage extends HTMLElement {
       body.innerHTML = `<div class="page"><p class="muted">Reading the record…</p></div>`;
       return;
     }
+    if (this.watchGrid) this.watchGrid.disconnect();
     body.innerHTML = this.editing
       ? this.roomEditor()
       : this.tab === "house"
@@ -862,6 +873,14 @@ class RoomThermostatPage extends HTMLElement {
           : this.roomsTab();
     this.bind(body);
     this.renderChrome();
+    const grid = body.querySelector(".room-grid");
+    if (grid) {
+      this.fitAddCell();
+      // The column count changes with the window, and so does what is left
+      // of the last row.
+      this.watchGrid = new ResizeObserver(() => this.fitAddCell());
+      this.watchGrid.observe(grid);
+    }
   }
 
   // --- what a room is doing ----------------------------------------------
@@ -1000,6 +1019,27 @@ class RoomThermostatPage extends HTMLElement {
    * what closed pickers mid-search and threw away the scroll position; this
    * touches only the text that changed.
    */
+  /*
+   * Let the add cell finish the row it lands on.
+   *
+   * Three rooms in three columns put it alone on a second row and left two
+   * thirds of that row as an empty bordered box. How many columns there are
+   * is only known once the grid has been laid out, so it is measured rather
+   * than guessed.
+   */
+  fitAddCell() {
+    const grid = this.shadowRoot.querySelector(".room-grid");
+    const cell = grid?.querySelector(".add-cell");
+    if (!grid || !cell) return;
+    const columns = window.getComputedStyle(grid)
+      .gridTemplateColumns.split(" ").filter(Boolean).length;
+    if (!columns) return;
+    const used = this.rooms.length % columns;
+    const span = used === 0 ? columns : columns - used;
+    cell.style.gridColumn = span > 1 ? `span ${span}` : "";
+    cell.classList.toggle("spanning", span > 1);
+  }
+
   refreshLive() {
     const root = this.shadowRoot;
     if (!root || this.editing) return;
@@ -1319,6 +1359,8 @@ class RoomThermostatPage extends HTMLElement {
             this.numberBox("cool_limit_hysteresis", house.cool_limit_hysteresis, "K"))}
         </div></div>
 
+        ${this.howItWorks()}
+
         <div class="group"><div class="label">When the weather is wrong</div><div class="rows">
           ${this.settingRow("Heat anyway this far below setpoint",
             "The weather is a guess and the room's own thermometer is not. Keep this well below your setpoint, or it will heat on the very evenings the limit exists to prevent.",
@@ -1350,6 +1392,72 @@ class RoomThermostatPage extends HTMLElement {
         </div>
         <div class="aside-note">Frost protection is per room and ignores all of this.
           See <a class="link" data-go="#rooms">Rooms</a>.</div>
+      </div>
+    </div>`;
+  }
+
+  /**
+   * The whole of it, in order, in words.
+   *
+   * Every number on this page is one clause of a single sentence, and the
+   * sentence is never written down anywhere. Somebody coming back in six
+   * months — or arriving for the first time — should be able to read what
+   * their house is actually doing without reconstructing it from eight
+   * fields.
+   */
+  howItWorks() {
+    const house = this.draftHouse || this.house;
+    const limit = number(house.heat_limit);
+    const back = number(Number(house.heat_limit) + Number(house.heat_limit_hysteresis));
+    const cool = number(house.cool_limit);
+    const coolBack = number(Number(house.cool_limit) - Number(house.cool_limit_hysteresis));
+    return `<div class="group explainer">
+      <div class="label">How the thermostat decides</div>
+      <div class="rows">
+        <div class="prose">
+          <p><b>A room asks first.</b> Every room compares its own sensor with its
+          setpoint. Below it, the room wants heat; above it, it wants cooling. That
+          is the whole of what a room knows, and on its own it would run the heating
+          in September because 20 °C is still below 22 °C.</p>
+
+          <p><b>The house answers second.</b> A setpoint of 22 means "heat to 22" in
+          January and "do nothing" in September, and the difference is the weather.
+          So the house watches the outdoor temperature and decides once, for
+          everybody, whether heating is in season at all. A room that wants heat out
+          of season stays idle.</p>
+
+          <p><b>It decides on an average, not a reading.</b> Outdoor temperature
+          swings ten degrees between afternoon and dawn, and a threshold on the
+          reading would put the heating on every night and take it off every
+          afternoon. What is watched is a
+          <b>${house.damping_hours}-hour average</b> — slow enough that one warm day
+          does not end the season and one cold night does not start it.</p>
+
+          <p><b>The limit is where your house stops heating itself.</b> Above about
+          ${limit} °C outside, sun and cooking and bodies cover what the house loses,
+          and a room that is a degree down is on its way up anyway. Below it, the
+          room genuinely cannot get there alone. Heating leaves the season once the
+          average passes <b>${back} °C</b> and comes back below <b>${limit} °C</b> —
+          two thresholds, so a day sitting exactly on the line cannot flip it back
+          and forth.</p>
+
+          <p><b>And a change has to last ${house.season_dwell_hours} hours.</b> A
+          mild autumn dips under the limit for a few hours every night even after
+          the averaging. Without the wait, the season would turn over before dawn
+          and back by mid-morning; with it, nothing counts until it has held.</p>
+
+          <p><b>Cooling is judged differently, on purpose.</b> It follows the live
+          reading rather than the average, because one sunny afternoon in an
+          otherwise cold week genuinely overheats a room that afternoon. The air
+          conditioner stops below <b>${cool} °C</b> outside and returns above
+          <b>${coolBack} °C</b>.</p>
+
+          <p><b>Two things overrule all of it.</b> If a room drifts more than
+          ${number(house.heat_override)} K below its setpoint the heating runs
+          anyway — the weather is a guess and the room's own thermometer is not. And
+          frost protection, set per room, heats whatever the mode and whatever the
+          season: a thermostat switched off must not be able to freeze a pipe.</p>
+        </div>
       </div>
     </div>`;
   }
