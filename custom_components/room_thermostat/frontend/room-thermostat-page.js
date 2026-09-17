@@ -363,199 +363,227 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 .save-state { font:400 13px/1 var(--font); color:var(--muted); }
 .save-state.dirty { color:var(--accent-ink); }
 
-/* 8 ── ROOMS ──────────────────────────────────────────────── */
 
-/* Wider than the panel manager's workspace, which was three narrow columns.
-   This page is cards and charts, and 1180px of it left half a large screen
-   empty. */
-.page { padding:var(--s5) var(--page-inset) var(--s6); max-width:1680px; margin:0 auto; }
-.page-head { margin-bottom:var(--s5); }
-.page-head h1 { font:700 24px/1.2 var(--font); margin:0 0 var(--s2); }
-.page-head p { margin:0; color:var(--muted); max-width:62ch; }
+/* ============================================================
+   8 ── THE THERMOSTAT MODULE
+   Drawn to Thermostat Module.dc.html. The design's own values are
+   kept, expressed through the tokens above where they agree.
+   ============================================================ */
 
-.room-grid { display:grid; gap:var(--s4);
-  grid-template-columns:repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+.page { padding:32px; max-width:1180px; margin:0 auto; }
+.page.wide { max-width:1680px; }
+.page-head h1 { font:700 30px/1.1 var(--font); margin:0; }
+.page-head p { font:400 14px/1.5 var(--font); color:var(--muted); margin-top:4px; max-width:720px; }
+.page-head { display:flex; align-items:flex-end; gap:20px; margin-bottom:20px; }
+.page-head .grow { flex:1; }
 
-.room-card { background:var(--surface); border:1px solid var(--line);
-  display:flex; flex-direction:column; gap:var(--s3); padding:var(--s4); min-width:0; }
-.room-card header { font:600 16px/1.2 var(--font); display:flex; align-items:center;
-  gap:var(--s2); min-width:0; }
-.room-card header .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.room-card .reading { font:500 28px/1 var(--font); margin:0; display:flex;
-  align-items:baseline; gap:var(--s2); }
-.room-card .reading small { font:400 13px/1 var(--font); color:var(--muted); }
-.room-card .controls { display:flex; gap:var(--s2); }
-.room-card .controls .select-wrap { flex:1; min-width:0; }
-.room-card .controls select { width:100%; }
-.room-card .controls .setpoint { position:relative; flex:none; width:6.5em; }
-.room-card .controls .setpoint input { width:100%; padding-right:2.2em; }
-.room-card .controls .setpoint span { position:absolute; right:var(--s3); top:50%;
-  transform:translateY(-50%); color:var(--muted); font:400 13px/1 var(--font);
-  pointer-events:none; }
-.room-card footer { margin-top:auto; display:flex; align-items:center; gap:var(--s3); }
+/* Two columns: the settings, and what is true right now. */
+.split { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:32px; align-items:start; }
+.column { display:flex; flex-direction:column; gap:26px; min-width:0; }
 
-/* State is a fill, never an outline colour. */
-.doing { display:inline-flex; align-items:center; gap:var(--s2); font:500 13px/1 var(--font);
-  padding:var(--s2) var(--s3); background:var(--surface-raised); color:var(--muted); }
-.doing::before { content:""; width:8px; height:8px; flex:none; background:var(--disabled); }
-.doing.heating { color:var(--ink); } .doing.heating::before { background:var(--accent); }
-.doing.cooling { color:var(--ink); } .doing.cooling::before { background:var(--info, #5B9DD9); }
-.doing .why { color:var(--muted); font-weight:400; margin-left:var(--s2); }
+/* A group of settings under a label, separated by rules rather than gaps. */
+.group > .label { font:600 11px/1 var(--font); letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:10px; }
+.group .rows { border:1px solid var(--line); }
+.row-setting { min-height:56px; display:flex; align-items:center; gap:16px; padding:12px 16px; }
+.row-setting + .row-setting { border-top:1px solid var(--line); }
+.row-setting .what { flex:1; min-width:0; }
+.row-setting .name { font:400 14px/1.4 var(--font); }
+.row-setting .name .optional { color:var(--disabled); }
+.row-setting .entity { font:500 12px/1.45 var(--mono); color:var(--muted); margin-top:2px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.row-setting .entity.none { font:400 13px/1.4 var(--font); color:var(--disabled); }
+.row-setting .why { font:400 13px/1.5 var(--font); color:var(--muted); margin-top:6px; max-width:560px; }
+.row-setting .control { flex:none; display:flex; align-items:center; gap:8px; }
+.row-setting input[type=text], .row-setting input[type=number] { height:36px; width:96px;
+  padding:0 12px; font:500 13px/1 var(--mono); text-align:center; }
+.row-setting input.wide { width:220px; text-align:left; font:400 14px/1 var(--font); }
+.row-setting .unit { font:400 13px/1 var(--font); color:var(--muted); min-width:20px; }
+.row-setting .select-wrap { flex:0 0 260px; }
 
-.add-card { border:1px dashed var(--line); background:transparent; color:var(--muted);
-  min-height:120px; }
-.add-card:hover { color:var(--ink); background:var(--surface); }
+/* Rooms */
+.room-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%,360px),1fr));
+  border:1px solid var(--line); }
+/* Shared rules rather than gaps: the grid is one object, not nine cards. */
+.room-cell { border-left:1px solid var(--line); border-top:1px solid var(--line);
+  margin:-1px 0 0 -1px; padding:20px; display:flex; flex-direction:column; gap:16px;
+  min-height:236px; min-width:0; }
+.room-cell .head { display:flex; align-items:flex-start; gap:14px; }
+.room-icon { flex:none; width:40px; height:40px; display:grid; place-items:center;
+  border-radius:var(--radius); }
+.room-cell .naming { flex:1; min-width:0; }
+.room-cell .naming b { font:600 17px/1.3 var(--font); display:block; }
+.room-cell .naming small { font:500 12px/1.45 var(--mono); color:var(--muted); margin-top:3px;
+  display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pill { flex:none; padding:5px 10px; border-radius:999px; font:600 11px/1 var(--font);
+  letter-spacing:.12em; text-transform:uppercase; }
+.reading { display:flex; align-items:baseline; gap:7px; }
+.reading b { font:700 30px/1 var(--font); letter-spacing:-.01em; }
+.reading .unit { font:600 15px/1; color:var(--muted); }
+.reading .hum { font:400 13px/1; color:var(--muted); margin-left:8px; }
+.room-cell .controls { border:1px solid var(--line); }
+.control-row { min-height:40px; display:flex; align-items:center; gap:12px; padding:0 16px; }
+.control-row + .control-row { border-top:1px solid var(--line); }
+.control-row .what { flex:1; min-width:0; font:400 14px/1.4 var(--font); color:var(--muted); }
+.control-row .select-wrap { flex:0 0 132px; }
+.control-row select { height:28px; font:400 13px/1 var(--font); }
+.control-row input { height:28px; width:72px; font:500 13px/1 var(--mono); text-align:center; }
+.control-row .doing { flex:1; min-width:0; font:400 13px/1.4 var(--font); color:var(--muted); }
+.dot { flex:none; width:8px; height:8px; border-radius:50%; }
+.room-cell .actions { display:flex; gap:8px; margin-top:auto; }
+.add-cell { border-left:1px solid var(--line); border-top:1px solid var(--line);
+  margin:-1px 0 0 -1px; padding:20px; display:grid; place-items:center; }
+.add-cell button { width:100%; height:100%; min-height:196px; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:8px; border:1px dashed var(--disabled);
+  background:transparent; color:var(--muted); }
+.add-cell button:hover { background:var(--surface); color:var(--ink); }
+.add-cell .plus { font:400 20px/1 var(--font); }
+.add-cell .what { font:600 14px/1 var(--font); }
+.add-cell .why { font:400 12px/1.4 var(--font); color:var(--disabled); }
 
-.empty { text-align:center; padding:var(--s6) var(--s4); border:1px dashed var(--line); }
-.empty h2 { font:700 18px/1.2 var(--font); margin:0 0 var(--s2); }
-.empty p { color:var(--muted); margin:0 0 var(--s4); }
+/* What is true right now, beside whatever is being edited. */
+.inspector { border:1px solid var(--line); }
+.inspector .cap { height:44px; display:flex; align-items:center; padding:0 16px;
+  border-bottom:1px solid var(--line); font:600 11px/1 var(--font); letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted); }
+.inspector .now { padding:16px; display:flex; flex-direction:column; gap:14px; }
+.inspector .facts > div { min-height:40px; display:flex; align-items:center; gap:16px;
+  padding:0 16px; font-size:14px; border-top:1px solid var(--line); }
+.inspector .facts .what { flex:1; color:var(--muted); }
+.note { padding:14px 16px; border:1px solid var(--line); background:var(--accent-wash);
+  font:400 13px/1.55 var(--font); }
+.inspector .note { border:0; border-top:1px solid var(--line); }
+.aside-note { font:400 13px/1.5 var(--font); color:var(--muted); }
+.danger-group > .label { color:var(--danger); }
+.danger-group { padding-top:26px; border-top:1px solid var(--line); }
 
+/* History */
+.ranges { display:flex; gap:8px; }
+.summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border:1px solid var(--line); }
+.summary > div { padding:14px 16px; }
+.summary > div + div { border-left:1px solid var(--line); }
+.summary .cap { font:600 11px/1 var(--font); letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); }
+.summary .big { display:flex; align-items:baseline; gap:6px; margin-top:6px;
+  font:700 20px/1 var(--font); }
+.summary .big span { font:400 13px/1; color:var(--muted); }
+.summary .under { font:400 12px/1.4 var(--font); color:var(--muted); margin-top:4px; }
 
-/* 9 ── PICKERS ────────────────────────────────────────────── */
+.lanes { border:1px solid var(--line); }
+.lane-cap { min-height:40px; display:flex; align-items:center; gap:12px; padding:0 16px;
+  border-bottom:1px solid var(--line); font:600 11px/1 var(--font); letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted); }
+.lane-cap + .lane-cap, .lanes > .lane-cap:not(:first-child) { border-top:1px solid var(--line); }
+.lane-cap .aside { margin-left:auto; font:400 12px/1 var(--font); text-transform:none;
+  letter-spacing:0; }
+.lane { display:flex; gap:20px; padding:16px 20px 12px; }
+.lane .gutter { flex:none; width:152px; position:relative; font:400 12px/1 var(--font);
+  color:var(--muted); }
+.lane .gutter span { position:absolute; right:0; }
+.lane .plot { flex:1; min-width:0; }
+.lane svg, .strip svg, .signature-plot svg { display:block; width:100%; }
+.lane-key { display:flex; flex-wrap:wrap; gap:16px; padding:0 20px 14px 192px;
+  font:400 12px/1.4 var(--font); color:var(--muted); }
+.lane-key span { display:flex; align-items:center; gap:7px; }
+.lane-key i { display:block; }
+.strip { min-height:36px; display:flex; align-items:center; gap:20px; padding:0 20px;
+  border-bottom:1px solid var(--line); }
+.strip .naming { flex:0 0 152px; display:flex; align-items:baseline; gap:10px; min-width:0; }
+.strip .naming b { flex:1; min-width:0; font:400 13px/1.4 var(--font); color:var(--muted);
+  font-weight:400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.strip .naming small { flex:none; font:500 12px/1 var(--mono); color:var(--muted); }
+.strip .plot { flex:1; min-width:0; }
+.axis-row { display:flex; justify-content:space-between; padding:10px 20px 14px 192px;
+  font:400 12px/1 var(--font); color:var(--muted); }
+.legend-row { display:flex; flex-wrap:wrap; gap:8px; padding:14px 20px;
+  border-top:1px solid var(--line); }
+.legend-row button { display:flex; align-items:center; gap:8px; height:28px; padding:0 12px;
+  font:400 13px/1 var(--font); }
+.legend-row i { width:14px; height:2px; display:block; }
 
-.entity-picker { position:relative; }
-.entity-results { position:absolute; left:0; right:0; z-index:5;
-  border:1px solid var(--line); border-top:0; margin-top:-1px; max-height:280px;
-  overflow:auto; overflow-x:hidden; background:var(--canvas); }
+.section h2 { font:700 22px/1.2 var(--font); margin:0; }
+.section > p { font:400 14px/1.5 var(--font); color:var(--muted); margin-top:6px; max-width:680px; }
+.section .after { font:400 11px/1.4 var(--font); color:var(--muted); margin-top:8px; }
+.grid-table { display:grid; border:1px solid var(--line); margin-top:16px; }
+.grid-table .th { padding:10px 16px; border-bottom:1px solid var(--line); font:600 11px/1 var(--font);
+  letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+.grid-table .td { padding:12px 16px; border-top:1px solid var(--line); font:400 14px/1.4 var(--font); }
+.grid-table .num { text-align:right; font-variant-numeric:tabular-nums; }
+.grid-table .mono { font:500 13px/1.4 var(--mono); }
+.grid-table .quiet { font:400 13px/1.4 var(--font); color:var(--muted); }
+.what-if { grid-template-columns:minmax(0,1fr) repeat(3,minmax(0,1fr)) minmax(0,1.4fr); }
+.rooms-table { grid-template-columns:minmax(0,2fr) repeat(4,minmax(0,1fr)) minmax(0,1.5fr); }
+
+.signature-split { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:20px;
+  margin-top:16px; align-items:start; }
+.signature-plot { border:1px solid var(--line); padding:20px; }
+.signature-plot .holder { position:relative; }
+.signature-plot .ytick { position:absolute; right:94.4%; transform:translateY(-50%);
+  font:400 11px/1 var(--font); color:var(--muted); }
+.signature-plot .xrow { display:flex; justify-content:space-between; gap:12px;
+  padding:6px 1.9% 0 6.9%; font:400 11px/1 var(--font); color:var(--muted); }
+.signature-plot .after { font:400 11px/1.4 var(--font); color:var(--muted); margin-top:10px; }
+
+.actions-bar { display:flex; align-items:center; gap:12px; }
+button.quiet { background:transparent; border-color:transparent; color:var(--muted); }
+button.quiet:hover { background:var(--surface-raised); color:var(--ink); }
+button.quiet.tiny { height:auto; padding:0 4px; font-size:11px; }
+button.danger { background:transparent; border-color:var(--line); color:var(--danger); }
+button.danger:hover { background:#2E1512; }
+.row-setting .problem { color:var(--danger); }
+.entity-picker { position:relative; width:280px; }
+.entity-results { position:absolute; right:0; top:calc(100% + 4px); width:320px; z-index:5;
+  border:1px solid var(--line); max-height:280px; overflow:auto; overflow-x:hidden;
+  background:var(--canvas); }
 .entity-results button { display:flex; flex-direction:column; align-items:flex-start;
   justify-content:center; gap:2px; width:100%; height:52px; border:0; border-radius:0;
   background:transparent; padding:0 var(--s3); text-align:left; }
 .entity-results button + button { border-top:1px solid var(--line); }
+.entity-results button:hover { background:var(--surface-raised); }
 .entity-results b, .entity-results small { max-width:100%; overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap; }
-.entity-results button:hover { background:var(--surface-raised); }
 .entity-results b { font:400 14px/1.2 var(--font); }
 .entity-results small { font:500 12px/1.3 var(--mono); color:var(--muted); }
 .entity-results .none { padding:var(--s3); color:var(--muted); font:400 13px/1.4 var(--font); }
-.entity-chosen { font:500 12px/1.3 var(--mono); color:var(--muted); }
+.tabs[hidden] { display:none; }
 
-
-/* 10 ── EDITOR ────────────────────────────────────────────── */
-
-.editor { max-width:720px; display:flex; flex-direction:column; gap:var(--s4); }
-/* A band label names the group beneath it and separates it from the one
-   above with a rule, which is how this design separates anything. */
-.band-label { font:500 12px/1 var(--font); letter-spacing:.08em; text-transform:uppercase;
-  color:var(--muted); padding-top:var(--s4); border-top:1px solid var(--line); }
-.editor > .band-label:first-child { padding-top:0; border-top:0; }
-.editor .field { display:flex; flex-direction:column; gap:var(--s2); }
-.editor .field > span { font:500 14px/1 var(--font); }
-.editor .field small { color:var(--muted); font:400 12px/1.5 var(--font); }
-.editor .field > span { font:500 14px/1 var(--font); }
-.entity-list { display:flex; flex-direction:column; gap:var(--s2); }
-.editor .field .problem { color:var(--danger); }
-.editor .field.invalid input, .editor .field.invalid select { border-color:var(--danger); }
-.editor .row { display:flex; gap:var(--s3); align-items:flex-end; }
-.editor .row .field { flex:1; min-width:0; }
-/* A number is a few characters wide; a field the width of the form invites
-   somebody to type a sentence into it. */
-.editor .row input[type=number] { width:8em; flex:none; }
-.editor .unit { color:var(--muted); font:400 13px/1 var(--font); padding-bottom:10px; }
-.editor .actions { display:flex; align-items:center; gap:var(--s3); margin-top:var(--s3);
-  padding-top:var(--s4); border-top:1px solid var(--line); flex-wrap:wrap; }
-.editor .actions .danger { margin-left:auto; }
-.foot { color:var(--muted); font:400 13px/1.6 var(--font); background:var(--surface);
-  border-left:2px solid var(--line); padding:var(--s3) var(--s4); }
-.foot strong { color:var(--ink); }
-
-
-/* 11 ── HISTORY ───────────────────────────────────────────── */
-
-.history { display:flex; flex-direction:column; gap:var(--s5); }
-.spans { display:flex; gap:var(--s2); }
-.spans button.active { background:var(--surface-raised); color:var(--ink); }
-
-.chart { background:var(--surface); border:1px solid var(--line); padding:var(--s4);
-  overflow-x:auto; position:relative; }
-.chart svg[data-timeline] { touch-action:none; }
-
-line.crosshair { stroke:var(--ink); stroke-width:1; opacity:.5; }
-circle.crosshair-dot { stroke:var(--canvas); stroke-width:1.5; }
-circle.crosshair-dot.outdoor { fill:var(--muted); }
-circle.crosshair-dot.damped { fill:var(--accent); }
-circle.crosshair-dot.room-1 { fill:#6FB1D9; }
-circle.crosshair-dot.room-2 { fill:#9AD96F; }
-circle.crosshair-dot.room-3 { fill:#D98FBF; }
-
-/* The readings under the pointer. Home Assistant puts these in a floating
-   card; so does this, and it stays inside the chart rather than widening the
-   page at the right-hand edge. */
-.readout { position:absolute; top:var(--s4); z-index:4; pointer-events:none;
-  background:var(--surface-raised); border:1px solid var(--line);
-  padding:var(--s3); min-width:190px; }
+.lane .plot { position:relative; }
+.lane svg[data-lane] { touch-action:none; }
+line.crosshair { stroke:var(--ink); stroke-width:1; opacity:.55; }
+.readout { position:absolute; top:8px; z-index:4; pointer-events:none;
+  background:var(--surface-raised); border:1px solid var(--line); padding:var(--s3);
+  min-width:190px; }
 .readout[data-side=right] { margin-left:var(--s3); }
 .readout[data-side=left] { margin-right:var(--s3); }
-.readout p { display:flex; align-items:center; gap:var(--s2);
-  font:400 13px/1.6 var(--font); white-space:nowrap; }
+.readout p { display:flex; align-items:center; gap:var(--s2); font:400 13px/1.6 var(--font);
+  white-space:nowrap; }
 .readout p strong { margin-left:auto; font-variant-numeric:tabular-nums; }
-.readout .when { font:500 12px/1.4 var(--mono); color:var(--muted);
-  padding-bottom:var(--s2); margin-bottom:var(--s2); border-bottom:1px solid var(--line); }
-.readout .swatch { display:inline-block; width:10px; height:10px; flex:none;
-  background:var(--muted); }
-.readout .swatch.damped { background:var(--accent); }
-.readout .swatch.room-1 { background:#6FB1D9; }
-.readout .swatch.room-2 { background:#9AD96F; }
-.readout .swatch.room-3 { background:#D98FBF; }
-.chart svg { display:block; width:100%; height:auto; min-width:320px; }
+.readout .when { font:500 12px/1.4 var(--mono); color:var(--muted); padding-bottom:var(--s2);
+  margin-bottom:var(--s2); border-bottom:1px solid var(--line); }
+.readout .swatch { display:inline-block; width:10px; height:10px; flex:none; }
 
-/* A wash, not a block. The season is context behind the lines, and at full
-   strength it read as the most important thing on the chart. */
-.demand-row.season .bars i { background:var(--muted); }
-.hysteresis-band { fill:var(--surface-raised); }
-.limit { stroke:var(--muted); stroke-width:1; stroke-dasharray:4 4; }
-.axis-line { stroke:var(--line); stroke-width:1; }
-.line { fill:none; stroke-width:1.5; stroke-linejoin:round; }
-.line.outdoor { stroke:var(--muted); }
-.line.damped { stroke:var(--accent); stroke-width:2; }
-.line.room { stroke:var(--ink); opacity:.75; }
-.line.room-1 { stroke:#6FB1D9; } .line.room-2 { stroke:#9AD96F; } .line.room-3 { stroke:#D98FBF; }
-text.axis { fill:var(--muted); font:400 11px/1 var(--font-mono); }
-circle.day { fill:var(--accent); }
-text.measured-label { fill:var(--accent-ink); }
-line.fit { stroke:var(--ink); stroke-width:1.5; }
-line.measured { stroke:var(--accent); stroke-width:1; stroke-dasharray:3 3; }
-
-.legend { display:flex; flex-wrap:wrap; gap:var(--s2); list-style:none; margin:var(--s3) 0 0;
-  padding:0; }
-.legend button { font:400 12px/1 var(--font); padding:var(--s2) var(--s3); }
-.legend button.off { color:var(--disabled); }
-.legend .swatch { display:inline-block; width:12px; height:2px; margin-right:6px;
-  vertical-align:middle; background:var(--muted); }
-.legend .swatch.damped { background:var(--accent); height:3px; }
-.legend .swatch.room-1 { background:#6FB1D9; }
-.legend .swatch.room-2 { background:#9AD96F; }
-.legend .swatch.room-3 { background:#D98FBF; }
-
-.demand { display:flex; flex-direction:column; gap:var(--s2); }
-.demand-row { display:flex; align-items:center; gap:var(--s3); min-width:0; }
-.demand-name { width:9em; flex:none; color:var(--muted); font:400 13px/1 var(--font);
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* One bar per bucket, and there can be 168 of them. The row clips rather
-   than pushes: a bar a pixel too wide would otherwise widen the page. */
-.bars { display:flex; gap:1px; flex:1; min-width:0; height:18px; overflow:hidden; }
-.bars i { flex:1 1 0; background:var(--accent); min-width:0; }
-
-.signature h3 { font:600 16px/1.2 var(--font); margin:0 0 var(--s3); }
-.signature p { margin:var(--s3) 0 0; max-width:62ch; }
-
-.rooms-table { width:100%; border-collapse:collapse; font:400 14px/1.4 var(--font); }
-.rooms-table th { text-align:left; font:500 12px/1 var(--font); color:var(--muted);
-  text-transform:uppercase; letter-spacing:.06em; padding:0 var(--s3) var(--s2) 0; }
-.rooms-table td { padding:var(--s3) var(--s3) var(--s3) 0; border-top:1px solid var(--line);
-  font-variant-numeric:tabular-nums; }
-
-
-/* 12 ── RESPONSIVE ────────────────────────────────────────── */
-
+@media (max-width:1100px) {
+  .split, .signature-split { grid-template-columns:minmax(0,1fr); }
+  .summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .summary > div:nth-child(3) { border-left:0; }
+  .summary > div:nth-child(n+3) { border-top:1px solid var(--line); }
+}
 @media (max-width:600px) {
-  :host { --page-inset:var(--s3); }
-  .page { padding:var(--s4) var(--page-inset) var(--s6); }
-  .page-head h1 { font-size:20px; }
-  .room-grid { grid-template-columns:minmax(0,1fr); }
-  .editor .row { flex-direction:column; align-items:stretch; }
-  .editor .actions .danger { margin-left:0; }
-  .demand-name { width:6em; }
-  /* A phone's keyboard zooms a field whose text is under 16px. */
+  .page { padding:20px 12px 32px; }
+  .page-head { flex-direction:column; align-items:stretch; gap:12px; }
+  .page-head h1 { font-size:22px; }
+  .row-setting { flex-direction:column; align-items:stretch; }
+  .row-setting .control { justify-content:flex-start; }
+  .row-setting .select-wrap, .row-setting input.wide { flex:1; width:auto; }
+  .summary { grid-template-columns:minmax(0,1fr); }
+  .summary > div + div { border-left:0; border-top:1px solid var(--line); }
+  .lane .gutter { display:none; }
+  .lane-key, .axis-row { padding-left:20px; }
+  .strip .naming { flex:0 0 96px; }
+  .what-if, .rooms-table { grid-template-columns:minmax(0,1fr); }
+  .grid-table .th { display:none; }
+  .grid-table .td { border-top:0; }
+  .grid-table .td:first-child { border-top:1px solid var(--line); }
   input, select { font-size:16px; }
 }
 
@@ -574,6 +602,7 @@ line.measured { stroke:var(--accent); stroke-width:1; stroke-dasharray:3 3; }
 [hidden] { display:none !important; }
 `;
 
+
 const escapeHtml = (value) =>
   String(value ?? "").replace(/[&<>'"]/g, (char) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
@@ -587,14 +616,37 @@ const PROBLEMS = {
     "A room that can neither heat nor cool is a thermometer. Give it an air conditioner, a heater, or both.",
 };
 
-/**
- * A moment on the time axis, at the resolution the span deserves.
- *
- * A 24-hour chart wants a clock and a 90-day one wants a date; both on both
- * is noise.
- */
-/** A moment in full, for the readout: the day and the time, both. */
-const moment_label = (timestamp) => {
+const TABS = [["rooms", "Rooms"], ["house", "House"], ["history", "History"]];
+
+/** Home Assistant's mode names, in the design's words. */
+const MODES = {
+  off: "Off", heat: "Heat", cool: "Cool", heat_cool: "Heat / cool",
+  dry: "Dry", fan_only: "Fan only",
+};
+
+/** The design's colours, where they are not already tokens. */
+const TONE = {
+  off:     { pillBg: "#242B33", pillInk: "#949CA3", dot: "#4A5158", iconBg: "#242B33", iconInk: "#C2C9CF" },
+  idle:    { pillBg: "#33200F", pillInk: "#FF9500", dot: "#FF9500", iconBg: "#242B33", iconInk: "#FF9500" },
+  running: { pillBg: "#33200F", pillInk: "#FF9455", dot: "#F36D21", iconBg: "#33200F", iconInk: "#FF9455" },
+};
+const ROOM_COLOURS = ["#5FA8E8", "#6FCF7F", "#D08CB8", "#E8C15F", "#9A8CE8"];
+const LANE = { season: "#1C1408", band: "#242B33", deficit: "#3B1A16", ran: "#3A2510" };
+
+/** The design's four mode icons. */
+const ICONS = {
+  heat: `<svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10" cy="10" r="3.6"></circle><line x1="10" y1="1.6" x2="10" y2="4"></line><line x1="10" y1="16" x2="10" y2="18.4"></line><line x1="1.6" y1="10" x2="4" y2="10"></line><line x1="16" y1="10" x2="18.4" y2="10"></line><line x1="4.1" y1="4.1" x2="5.8" y2="5.8"></line><line x1="14.2" y1="14.2" x2="15.9" y2="15.9"></line><line x1="15.9" y1="4.1" x2="14.2" y2="5.8"></line><line x1="5.8" y1="14.2" x2="4.1" y2="15.9"></line></svg>`,
+  cool: `<svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="10" y1="1.8" x2="10" y2="18.2"></line><line x1="2.9" y1="5.9" x2="17.1" y2="14.1"></line><line x1="2.9" y1="14.1" x2="17.1" y2="5.9"></line><line x1="7.4" y1="4.4" x2="10" y2="6.4"></line><line x1="12.6" y1="4.4" x2="10" y2="6.4"></line><line x1="7.4" y1="15.6" x2="10" y2="13.6"></line><line x1="12.6" y1="15.6" x2="10" y2="13.6"></line></svg>`,
+  off: `<svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10" cy="11.2" r="6.6"></circle><line x1="10" y1="2.2" x2="10" y2="8.4"></line></svg>`,
+  other: `<svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="7.4" y="2" width="5.2" height="11" rx="2.6"></rect><circle cx="10" cy="14.9" r="3.3"></circle></svg>`,
+};
+
+const number = (value, digits = 1) =>
+  value === null || value === undefined || Number.isNaN(Number(value))
+    ? "—" : Number(value).toFixed(digits);
+
+/** A moment in full, for a readout. */
+const momentLabel = (timestamp) => {
   const at = new Date(timestamp * 1000);
   return `${at.toLocaleDateString([], { day: "numeric", month: "short" })} ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 };
@@ -606,24 +658,6 @@ const when = (timestamp, span) => {
     : at.toLocaleDateString([], { day: "numeric", month: "short" });
 };
 
-/** What a room is doing, in words rather than identifiers. */
-const ACTIONS = {
-  idle: "Idle", heating: "Heating", cooling: "Cooling",
-  drying: "Drying", fan: "Fan", off: "Off",
-};
-
-/** Home Assistant's mode names, in words rather than identifiers. */
-const MODES = {
-  off: "Off", heat: "Heat", cool: "Cool", heat_cool: "Auto",
-  dry: "Dry", fan_only: "Fan",
-};
-
-const TABS = [
-  ["rooms", "Rooms"],
-  ["house", "House"],
-  ["history", "History"],
-];
-
 class RoomThermostatPage extends HTMLElement {
   constructor() {
     super();
@@ -631,11 +665,9 @@ class RoomThermostatPage extends HTMLElement {
     this.rooms = [];
     this.house = {};
     this.loaded = false;
-    this.loading = true;
     this.busy = false;
     this.error = "";
     this.tab = "rooms";
-    /** The id of the room being edited, "new" for one that is not saved yet. */
     this.editing = null;
     this.draft = null;
     this.draftHouse = null;
@@ -655,7 +687,11 @@ class RoomThermostatPage extends HTMLElement {
     const first = !this._hass;
     this._hass = value;
     if (first && this.isConnected) this.load();
-    else if (this.loaded) this.renderLive();
+    // Live values are written into the nodes that hold them. Re-rendering
+    // here is what made every state change in the house redraw the whole
+    // page — dozens of times a minute, closing pickers and scrolling to the
+    // top, which looked like the page reloading on every navigation.
+    else if (this.loaded) this.refreshLive();
   }
 
   set narrow(value) { this.toggleAttribute("narrow", Boolean(value)); }
@@ -665,7 +701,7 @@ class RoomThermostatPage extends HTMLElement {
     installFonts();
     window.addEventListener("hashchange", this.routeHandler);
     this.readRoute();
-    this.render();
+    this.renderShell();
     if (this._hass && !this.loaded) this.load();
   }
 
@@ -680,20 +716,18 @@ class RoomThermostatPage extends HTMLElement {
     this.problems = {};
     this.draft = id
       ? id === "new"
-        ? { name: "", cooling_strategy: "passthrough" }
+        ? { name: "", cooling_strategy: "gated", frost_temperature: 5 }
         : { ...this.rooms.find((room) => room.id === id) }
       : null;
   }
 
   restoreRoute() {
     this.readRoute();
-    this.render();
+    this.renderBody();
     if (this.tab === "history" && !this.history) this.loadHistory();
   }
 
-  go(hash) {
-    window.location.hash = hash;
-  }
+  go(hash) { window.location.hash = hash; }
 
   async call(message) {
     if (!this._hass) throw new Error("Home Assistant is not ready");
@@ -701,8 +735,6 @@ class RoomThermostatPage extends HTMLElement {
   }
 
   async load() {
-    this.loading = true;
-    this.render();
     try {
       const record = await this.call({ type: "room_thermostat/rooms/list" });
       this.rooms = record.rooms;
@@ -710,127 +742,79 @@ class RoomThermostatPage extends HTMLElement {
       this.loaded = true;
       this.error = "";
     } catch (err) {
-      this.error = err.message || "Could not read the record";
+      this.error = err?.message || "Could not read the record";
     }
-    this.loading = false;
     this.restoreRoute();
+    this.renderChrome();
   }
 
-  /**
-   * Redraw, but not while somebody is typing.
+  /*
+   * The chrome is drawn once and stays. Only the body is replaced when the
+   * route changes, and nothing at all is replaced when a reading changes.
    *
-   * Live values arrive constantly, and re-rendering the editor under a caret
-   * moves it to the end of the field.
+   * Replacing the whole page — bar, tabs and all — with "Reading the record…"
+   * is what made every navigation flash.
    */
-  renderLive() {
-    if (this.editing || this.tab === "house") return;
-    this.render();
+  renderShell() {
+    this.shadowRoot.innerHTML = `<style>${STYLES}</style>
+      <header class="app-bar" data-chrome></header>
+      <nav class="tabs" data-tabs></nav>
+      <main data-body></main>`;
+    this.renderChrome();
+    this.renderBody();
   }
 
-  render() {
-    if (!this.shadowRoot) return;
-    this.shadowRoot.innerHTML = `<style>${STYLES}</style>${this.chrome()}`;
-    this.bind();
+  renderChrome() {
+    const bar = this.shadowRoot.querySelector("[data-chrome]");
+    const tabs = this.shadowRoot.querySelector("[data-tabs]");
+    if (!bar || !tabs) return;
+    bar.innerHTML = `<span class="mark"></span>
+      <nav class="crumbs">
+        ${this.editing
+          ? `<a class="link" data-go="#rooms">Rooms</a>
+             <span class="sep">/</span>
+             <span class="here">${escapeHtml(this.draft?.name || "New room")}</span>`
+          : `<span class="here">Room Thermostat</span>`}
+      </nav>
+      <span class="spacer"></span>
+      ${this.error ? `<span class="save-state dirty">${escapeHtml(this.error)}</span>` : ""}`;
+    tabs.hidden = Boolean(this.editing);
+    tabs.innerHTML = this.editing ? "" : TABS.map(([key, label]) =>
+      `<button data-go="#${key}" class="${key === this.tab ? "active" : ""}">${label}</button>`).join("");
+    this.bindChrome(bar);
+    this.bindChrome(tabs);
   }
 
-  chrome() {
-    if (this.loading) return `<div class="page"><p class="muted">Reading the record…</p></div>`;
-    const body = this.editing
+  bindChrome(root) {
+    root.querySelectorAll("[data-go]").forEach((node) => {
+      node.addEventListener("click", (event) => {
+        event.preventDefault();
+        this.go(node.dataset.go);
+      });
+    });
+  }
+
+  renderBody() {
+    const body = this.shadowRoot.querySelector("[data-body]");
+    if (!body) return;
+    if (!this.loaded) {
+      // Only ever seen once, before the first answer arrives.
+      body.innerHTML = `<div class="page"><p class="muted">Reading the record…</p></div>`;
+      return;
+    }
+    body.innerHTML = this.editing
       ? this.roomEditor()
       : this.tab === "house"
         ? this.houseTab()
         : this.tab === "history"
           ? this.historyTab()
           : this.roomsTab();
-    return `
-      <header class="app-bar">
-        <span class="mark"></span>
-        <nav class="crumbs">
-          ${this.editing
-            ? `<button class="back" data-cancel aria-label="Back to rooms">←</button>
-               <a class="link" href="#rooms">Rooms</a>
-               <span class="sep">/</span>
-               <span class="here">${escapeHtml(this.draft?.name || "New room")}</span>`
-            : `<span class="here">Room Thermostat</span>`}
-        </nav>
-        <span class="spacer"></span>
-        ${this.error ? `<span class="save-state dirty">${escapeHtml(this.error)}</span>` : ""}
-      </header>
-      ${this.editing ? "" : `<nav class="tabs">
-        ${TABS.map(([key, label]) =>
-          `<button data-tab="${key}" class="${key === this.tab ? "active" : ""}">${label}</button>`).join("")}
-      </nav>`}
-      <main class="page">${body}</main>`;
+    this.bind(body);
+    this.renderChrome();
   }
 
-  bind() {
-    const root = this.shadowRoot;
-    root.querySelectorAll("[data-tab]").forEach((button) => {
-      button.addEventListener("click", () => this.go(`#${button.dataset.tab}`));
-    });
-    root.querySelectorAll("[data-mode]").forEach((select) => {
-      select.addEventListener("change", () => this.setMode(select.dataset.mode, select.value));
-    });
-    root.querySelectorAll("[data-target]").forEach((input) => {
-      input.addEventListener("change", () => this.setTarget(input.dataset.target, input.value));
-    });
-    root.querySelectorAll("[data-open]").forEach((element) => {
-      element.addEventListener("click", () => this.go(`#rooms/${element.dataset.open}`));
-    });
-    root.querySelectorAll("[data-add-room]").forEach((button) => {
-      button.addEventListener("click", () => this.go("#rooms/new"));
-    });
-    root.querySelectorAll("[data-span]").forEach((button) => {
-      button.addEventListener("click", () => {
-        this.span = button.dataset.span;
-        this.loadHistory();
-      });
-    });
-    root.querySelectorAll("[data-series]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const key = button.dataset.series;
-        if (this.hiddenSeries.has(key)) this.hiddenSeries.delete(key);
-        else this.hiddenSeries.add(key);
-        this.render();
-      });
-    });
-    root.querySelectorAll("[data-revert]").forEach((button) => {
-      button.addEventListener("click", () => {
-        this.draftHouse = null;
-        this.render();
-      });
-    });
-    root.querySelectorAll("[data-cancel]").forEach((button) => {
-      button.addEventListener("click", () => this.go("#rooms"));
-    });
-    root.querySelectorAll("[data-delete]").forEach((button) => {
-      button.addEventListener("click", () => this.deleteRoom());
-    });
+  // --- what a room is doing ----------------------------------------------
 
-    this.bindPickers(root);
-    this.bindTimeline(root);
-
-    const form = root.querySelector("form");
-    if (!form) return;
-    // Written straight into the draft without re-rendering: a redraw on every
-    // keystroke puts the caret at the end of the field.
-    form.addEventListener("input", (event) => this.take(event.target));
-    form.addEventListener("change", (event) => this.take(event.target));
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      if (this.tab === "house") this.saveHouse();
-      else this.saveRoom();
-    });
-  }
-
-  // --- the tabs, each arriving in its own turn -------------------------
-
-  /**
-   * The thermostat entity for a room.
-   *
-   * Matched on the room id it publishes, not on its name: two rooms may be
-   * named alike, and a room being renamed would lose its card mid-edit.
-   */
   climateOf(room) {
     return Object.values(this._hass?.states || {}).find(
       (state) =>
@@ -841,90 +825,181 @@ class RoomThermostatPage extends HTMLElement {
 
   liveOf(room) {
     const state = this.climateOf(room);
-    if (!state) return { missing: true };
-    const attributes = state.attributes || {};
+    const attributes = state?.attributes || {};
+    const mode = state?.state || "off";
     const action = attributes.hvac_action || "idle";
-    // Why it is doing nothing. "idle" on its own is what made the season
+    const target = attributes.temperature;
+    const frost = number(room.frost_temperature ?? 5);
+
+    // The design's own sentences. "Idle" alone is what made the season
     // lockout look like a fault rather than a decision.
-    let why = "";
-    if (action === "idle" && state.state === "heat" && attributes.heating_season === false) {
-      why = "out of heating season";
-    } else if (action === "idle" && state.state === "cool" && attributes.cooling_season === false) {
-      why = "out of cooling season";
-    }
+    let doing;
+    if (!state) doing = "No reading — this room's thermostat has not started";
+    else if (mode === "off") doing = `Off — frost protection still holds at ${frost} °C`;
+    else if (mode === "heat" && attributes.heating_season === false)
+      doing = "Idle — heating is out of season";
+    else if (mode === "cool" && attributes.cooling_season === false)
+      doing = "Idle — cooling is out of season";
+    else if (action === "heating") doing = `Heating to ${number(target)} °C`;
+    else if (action === "cooling") doing = `Cooling to ${number(target)} °C`;
+    else if (action === "drying") doing = "Drying — no setpoint in this mode";
+    else if (action === "fan") doing = "Running — fan only";
+    else doing = "At target, idle";
+
+    const tone = !state || mode === "off"
+      ? TONE.off
+      : action === "heating" || action === "cooling"
+        ? TONE.running
+        : TONE.idle;
+    const word = !state ? "Unknown"
+      : mode === "off" ? "Off"
+      : action === "heating" ? "Heating"
+      : action === "cooling" ? "Cooling"
+      : "Idle";
+    const icon = mode === "heat" ? "heat" : mode === "cool" ? "cool"
+      : mode === "off" ? "off" : "other";
+
     return {
-      entityId: state.entity_id,
-      mode: state.state,
+      entityId: state?.entity_id || null,
+      mode,
       modes: attributes.hvac_modes || [],
       temperature: attributes.current_temperature,
       humidity: attributes.current_humidity,
-      target: attributes.temperature,
-      action,
-      why,
+      target,
+      doing, tone, word, icon,
     };
   }
 
-  roomCard(room) {
+  roomCell(room) {
     const live = this.liveOf(room);
-    if (live.missing) {
-      return `<article class="room-card">
-        <header><span class="name">${escapeHtml(room.name)}</span></header>
-        <p class="muted">No reading — this room's thermostat has not started.</p>
-        <footer><button data-open="${room.id}">Settings</button></footer>
-      </article>`;
-    }
-    const reading = live.temperature === undefined || live.temperature === null
-      ? `<span class="muted">No reading</span>`
-      : `${Number(live.temperature).toFixed(1)} °C`;
-    const humidity = live.humidity === undefined || live.humidity === null
-      ? ""
-      : `<small>${Math.round(live.humidity)} %</small>`;
-    return `<article class="room-card">
-      <header><span class="name">${escapeHtml(room.name)}</span></header>
-      <p class="reading">${reading} ${humidity}</p>
-      <div class="controls">
-        <div class="select-wrap">
-          <select data-mode="${room.id}" aria-label="Mode">
-            ${live.modes.map((mode) =>
-              `<option value="${mode}" ${mode === live.mode ? "selected" : ""}>${MODES[mode] || mode}</option>`).join("")}
-          </select>
-        </div>
-        <label class="setpoint">
-          <input type="number" step="0.5" data-target="${room.id}" aria-label="Setpoint"
-                 value="${live.target ?? ""}" ${live.target === undefined || live.target === null ? "disabled" : ""}>
-          <span>°C</span>
-        </label>
+    return `<div class="room-cell" data-room="${room.id}">
+      <div class="head">
+        <span class="room-icon" data-icon
+              style="background:${live.tone.iconBg};color:${live.tone.iconInk}">${ICONS[live.icon]}</span>
+        <span class="naming">
+          <b>${escapeHtml(room.name)}</b>
+          <small title="${escapeHtml(room.temperature_sensor || "")}">${escapeHtml(room.temperature_sensor || "no sensor")}</small>
+        </span>
+        <span class="pill" data-pill
+              style="background:${live.tone.pillBg};color:${live.tone.pillInk}">${live.word}</span>
       </div>
-      <p class="doing ${live.action}">${ACTIONS[live.action] || live.action}${live.why ? `<span class="why">· ${live.why}</span>` : ""}</p>
-      <footer><button data-open="${room.id}">Settings</button></footer>
-    </article>`;
+      <p class="reading">
+        <b data-temp>${number(live.temperature)}</b><span class="unit">°C</span>
+        <span class="hum" data-hum>${live.humidity === undefined || live.humidity === null ? "" : `${Math.round(live.humidity)}&thinsp;% RH`}</span>
+      </p>
+      <div class="controls">
+        <div class="control-row">
+          <span class="what">Mode</span>
+          <div class="select-wrap">
+            <select data-mode="${room.id}" aria-label="Mode">
+              ${live.modes.map((mode) =>
+                `<option value="${mode}" ${mode === live.mode ? "selected" : ""}>${MODES[mode] || mode}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div class="control-row">
+          <span class="what">Target</span>
+          <input type="number" step="0.5" data-target="${room.id}" aria-label="Target"
+                 value="${live.target ?? ""}" ${live.target === undefined || live.target === null ? "disabled" : ""}>
+          <span class="unit">°C</span>
+        </div>
+        <div class="control-row">
+          <span class="dot" data-dot style="background:${live.tone.dot}"></span>
+          <span class="doing" data-doing>${escapeHtml(live.doing)}</span>
+        </div>
+      </div>
+      <div class="actions">
+        <button data-go="#rooms/${room.id}">Settings</button>
+        <button class="quiet" data-history="${room.id}">History</button>
+      </div>
+    </div>`;
   }
 
   roomsTab() {
     if (!this.rooms.length) {
-      return `<div class="empty">
-        <h2>No rooms yet</h2>
-        <p>A room is a temperature sensor and whatever heats or cools it.</p>
-        <button class="primary" data-add-room>Add a room</button>
+      return `<div class="page">
+        <div class="page-head"><div class="grow"><h1>Rooms</h1>
+          <p>A room is a temperature sensor and whatever heats or cools it.</p></div></div>
+        <div class="room-grid"><div class="add-cell">
+          <button data-add-room><span class="plus">+</span><span class="what">Add a room</span>
+            <span class="why">A sensor and whatever heats or cools it</span></button>
+        </div></div>
       </div>`;
     }
-    return `<div class="page-head">
-        <h1>Rooms</h1>
-        <p>What each room reads, what it is set to, and what it is doing.</p>
+    return `<div class="page wide">
+      <div class="page-head">
+        <div class="grow"><h1>Rooms</h1>
+          <p>What each room reads, what it is set to, and what it is doing.</p></div>
+        <button class="primary" data-add-room>Add a room</button>
       </div>
       <div class="room-grid">
-        ${this.rooms.map((room) => this.roomCard(room)).join("")}
-        <button class="add-card" data-add-room>+ Add a room</button>
-      </div>`;
+        ${this.rooms.map((room) => this.roomCell(room)).join("")}
+        <div class="add-cell">
+          <button data-add-room><span class="plus">+</span><span class="what">Add a room</span>
+            <span class="why">A sensor and whatever heats or cools it</span></button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  /*
+   * Write the readings into the nodes that hold them.
+   *
+   * A state arrives every few seconds. Redrawing the page for each one is
+   * what closed pickers mid-search and threw away the scroll position; this
+   * touches only the text that changed.
+   */
+  refreshLive() {
+    const root = this.shadowRoot;
+    if (!root || this.editing) return;
+    root.querySelectorAll("[data-room]").forEach((cell) => {
+      const room = this.rooms.find((item) => item.id === cell.dataset.room);
+      if (!room) return;
+      const live = this.liveOf(room);
+      const set = (selector, value) => {
+        const node = cell.querySelector(selector);
+        if (node && node.textContent !== value) node.textContent = value;
+      };
+      set("[data-temp]", number(live.temperature));
+      set("[data-doing]", live.doing);
+      const humidity = cell.querySelector("[data-hum]");
+      const shown = live.humidity === undefined || live.humidity === null
+        ? "" : `${Math.round(live.humidity)} % RH`;
+      if (humidity && humidity.textContent !== shown) humidity.textContent = shown;
+      const pill = cell.querySelector("[data-pill]");
+      if (pill && pill.textContent !== live.word) {
+        pill.textContent = live.word;
+        pill.style.background = live.tone.pillBg;
+        pill.style.color = live.tone.pillInk;
+      }
+      const dot = cell.querySelector("[data-dot]");
+      if (dot) dot.style.background = live.tone.dot;
+      const icon = cell.querySelector("[data-icon]");
+      if (icon) {
+        icon.style.background = live.tone.iconBg;
+        icon.style.color = live.tone.iconInk;
+        if (icon.dataset.shows !== live.icon) {
+          icon.dataset.shows = live.icon;
+          icon.innerHTML = ICONS[live.icon];
+        }
+      }
+      // A field somebody is typing in is left alone.
+      const mode = cell.querySelector("[data-mode]");
+      if (mode && mode !== root.activeElement && mode.value !== live.mode) mode.value = live.mode;
+      const target = cell.querySelector("[data-target]");
+      if (target && target !== root.activeElement && live.target !== undefined
+          && Number(target.value) !== Number(live.target)) {
+        target.value = live.target;
+      }
+    });
+    if (this.tab === "house" || this.editing) this.refreshInspector();
   }
 
   async setMode(roomId, mode) {
-    // A command, not a setting: it takes effect now and is not drafted.
     const live = this.liveOf(this.rooms.find((room) => room.id === roomId) || {});
     if (!live.entityId) return;
     await this._hass.callService("climate", "set_hvac_mode", {
-      entity_id: live.entityId,
-      hvac_mode: mode,
+      entity_id: live.entityId, hvac_mode: mode,
     });
   }
 
@@ -932,153 +1007,187 @@ class RoomThermostatPage extends HTMLElement {
     const live = this.liveOf(this.rooms.find((room) => room.id === roomId) || {});
     if (!live.entityId || value === "" || Number.isNaN(Number(value))) return;
     await this._hass.callService("climate", "set_temperature", {
-      entity_id: live.entityId,
-      temperature: Number(value),
+      entity_id: live.entityId, temperature: Number(value),
     });
   }
 
-  entityLabel(state) {
-    return `${state.attributes?.friendly_name || state.entity_id} · ${state.entity_id}`;
-  }
+  // --- rows of settings ---------------------------------------------------
 
-  /**
-   * An entity chosen by searching, rather than typed from memory.
-   *
-   * The hidden input carries the entity id, which is what the record wants;
-   * the visible one carries a name somebody recognises. Typing clears the
-   * hidden one, so a half-typed search can never be saved as an entity id.
-   */
-  entityPicker(name, label, selected, domains, hint = "", deviceClass = null) {
-    const states = Object.values(this._hass?.states || {})
-      .filter((state) => domains.includes(state.entity_id.split(".")[0]))
-      .filter((state) =>
-        !deviceClass || state.attributes?.device_class === deviceClass ||
-        state.entity_id.startsWith("input_number.") || state.entity_id.startsWith("number."))
-      .sort((first, second) => this.entityLabel(first).localeCompare(this.entityLabel(second)));
-    const chosen = selected ? this._hass?.states?.[selected] : null;
-    const display = chosen ? this.entityLabel(chosen) : selected || "";
-    const problem = this.problems[name];
-    return `<label class="field ${problem ? "invalid" : ""}">
-      <span>${escapeHtml(label)}</span>
-      <div class="entity-picker">
-        <input type="hidden" name="${name}" value="${escapeHtml(selected || "")}">
-        <input class="entity-search" data-entity-search type="search" autocomplete="off"
-               value="${escapeHtml(display)}" placeholder="Search entities…"
-               aria-label="${escapeHtml(label)}">
-        <div class="entity-results" hidden>
-          ${states.length ? states.map((state) => {
-            const option = this.entityLabel(state);
-            return `<button type="button" data-entity-option="${escapeHtml(state.entity_id)}"
-                      data-entity-label="${escapeHtml(option)}"
-                      data-entity-terms="${escapeHtml(option.toLowerCase())}">
-                      <b>${escapeHtml(state.attributes?.friendly_name || state.entity_id)}</b>
-                      <small>${escapeHtml(state.entity_id)}</small>
-                    </button>`;
-          }).join("") : `<p class="none">Nothing of that kind in this house.</p>`}
-        </div>
+  /** A row: what it is and why on the left, the control on the right. */
+  settingRow(name, why, control, { entity = null, problem = null } = {}) {
+    const message = problem ? PROBLEMS[problem] || problem : null;
+    return `<div class="row-setting">
+      <div class="what">
+        <div class="name">${name}</div>
+        ${entity === null ? "" : entity
+          ? `<div class="entity" title="${escapeHtml(entity)}">${escapeHtml(this.entityName(entity))}</div>`
+          : `<div class="entity none">Not set</div>`}
+        ${why ? `<div class="why">${why}</div>` : ""}
+        ${message ? `<div class="why problem">${escapeHtml(message)}</div>` : ""}
       </div>
-      ${problem ? `<small class="problem">${escapeHtml(PROBLEMS[problem] || problem)}</small>` : ""}
-      ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
-    </label>`;
-  }
-
-  /** Several entities of one kind, each picked the same way. */
-  entityList(name, label, selected, domains, hint = "") {
-    const values = [...(selected || []), ""];
-    return `<div class="field"><span>${escapeHtml(label)}</span>
-      <div class="entity-list" data-entity-list="${name}">
-        ${values.map((value, index) => {
-          const state = value ? this._hass?.states?.[value] : null;
-          const display = state ? this.entityLabel(state) : value || "";
-          const states = Object.values(this._hass?.states || {})
-            .filter((item) => domains.includes(item.entity_id.split(".")[0]))
-            .sort((first, second) => this.entityLabel(first).localeCompare(this.entityLabel(second)));
-          return `<div class="entity-picker">
-            <input type="hidden" data-list-value="${name}" value="${escapeHtml(value)}">
-            <input class="entity-search" data-entity-search type="search" autocomplete="off"
-                   value="${escapeHtml(display)}"
-                   placeholder="${index === values.length - 1 ? "Add another…" : "Search entities…"}"
-                   aria-label="${escapeHtml(label)}">
-            <div class="entity-results" hidden>
-              ${states.length ? states.map((item) => {
-                const option = this.entityLabel(item);
-                return `<button type="button" data-entity-option="${escapeHtml(item.entity_id)}"
-                          data-entity-label="${escapeHtml(option)}"
-                          data-entity-terms="${escapeHtml(option.toLowerCase())}">
-                          <b>${escapeHtml(item.attributes?.friendly_name || item.entity_id)}</b>
-                          <small>${escapeHtml(item.entity_id)}</small>
-                        </button>`;
-              }).join("") : `<p class="none">Nothing of that kind in this house.</p>`}
-            </div>
-          </div>`;
-        }).join("")}
-      </div>
-      ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
+      <div class="control">${control}</div>
     </div>`;
   }
 
-  field(name, label, value, hint = "") {
-    const problem = this.problems[name];
-    return `<label class="field ${problem ? "invalid" : ""}">
-      <span>${escapeHtml(label)}</span>
-      <input name="${name}" value="${escapeHtml(value ?? "")}">
-      ${problem ? `<small class="problem">${escapeHtml(PROBLEMS[problem] || problem)}</small>` : ""}
-      ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
-    </label>`;
+  entityName(entityId) {
+    const state = this._hass?.states?.[entityId];
+    return state ? `${state.attributes?.friendly_name || entityId} · ${entityId}` : entityId;
   }
 
-  number(name, label, value, unit, hint = "") {
-    return `<label class="field">
-      <span>${escapeHtml(label)}</span>
-      <div class="row">
-        <input name="${name}" type="number" step="0.5" value="${escapeHtml(value ?? "")}">
-        <span class="unit">${escapeHtml(unit)}</span>
-      </div>
-      ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
-    </label>`;
+  numberBox(name, value, unit) {
+    return `<input type="number" step="0.5" name="${name}" value="${escapeHtml(value ?? "")}">
+      <span class="unit">${unit}</span>`;
   }
+
+  /** A picker behind a Change button, as the design draws it. */
+  chooser(name, domains, deviceClass = null, label = "Change", clearable = false) {
+    const open = this.picking === name;
+    if (!open) {
+      return `<button type="button" data-pick="${name}">${label}</button>
+        ${clearable ? `<button type="button" class="quiet" data-clear="${name}" title="Clear">✕</button>` : ""}`;
+    }
+    const states = Object.values(this._hass?.states || {})
+      .filter((state) => domains.includes(state.entity_id.split(".")[0]))
+      .filter((state) => !deviceClass || state.attributes?.device_class === deviceClass
+        || !state.entity_id.startsWith("sensor."))
+      .sort((first, second) => this.entityName(first.entity_id)
+        .localeCompare(this.entityName(second.entity_id)));
+    return `<div class="entity-picker" data-picker="${name}">
+      <input class="entity-search" data-entity-search type="search" autocomplete="off"
+             placeholder="Search entities…" aria-label="Search entities">
+      <div class="entity-results">
+        ${states.length ? states.map((state) => {
+          const option = this.entityName(state.entity_id);
+          return `<button type="button" data-entity-option="${escapeHtml(state.entity_id)}"
+                    data-entity-terms="${escapeHtml(option.toLowerCase())}">
+                    <b>${escapeHtml(state.attributes?.friendly_name || state.entity_id)}</b>
+                    <small>${escapeHtml(state.entity_id)}</small>
+                  </button>`;
+        }).join("") : `<p class="none">Nothing of that kind in this house.</p>`}
+      </div>
+    </div>`;
+  }
+
+  // --- the room editor ----------------------------------------------------
 
   roomEditor() {
     const draft = this.draft || {};
     const isNew = !draft.id;
-    return `<div class="page-head">
-        <h1>${isNew ? "New room" : escapeHtml(draft.name || "Room")}</h1>
-        <p>A room is a temperature sensor and whatever heats or cools it.</p>
-      </div>
-      <form class="editor">
-        ${this.field("name", "Name", draft.name,
-          "What this room is called, here and in Home Assistant.")}
-        ${this.entityPicker("temperature_sensor", "Temperature sensor", draft.temperature_sensor,
-          ["sensor", "input_number", "number"],
-          "The reason this integration exists: the room is controlled against this, never against the air conditioner's own sensor.",
-          "temperature")}
-        ${this.entityPicker("humidity_sensor", "Humidity sensor", draft.humidity_sensor,
-          ["sensor", "input_number", "number"], "", "humidity")}
-        ${this.entityPicker("cooler", "Air conditioner", draft.cooler, ["climate"],
-          "Any climate entity. Its fan, swing and preset lists are mirrored rather than replaced.")}
-        ${this.entityList("heaters", "Heaters", draft.heaters, ["valve", "switch", "input_boolean"],
-          "A radiator valve is a valve entity, not a switch. A room may have several, and they open together.")}
-        <label class="field"><span>Cooling strategy</span>
-          <div class="select-wrap">
-            <select name="cooling_strategy">
-              <option value="passthrough" ${draft.cooling_strategy !== "gated" ? "selected" : ""}>Pass the setpoint to the unit</option>
-              <option value="gated" ${draft.cooling_strategy === "gated" ? "selected" : ""}>Park the unit and gate it on the room's sensor</option>
-            </select>
+    const live = isNew ? null : this.liveOf(draft);
+    const heaters = draft.heaters || [];
+    return `<div class="page split">
+      <div class="column">
+        <div class="page-head"><div class="grow">
+          <h1>${escapeHtml(draft.name || "New room")}</h1>
+          <p>A room is a temperature sensor and whatever heats or cools it.</p>
+        </div></div>
+
+        <div class="group"><div class="label">Identity</div><div class="rows">
+          ${this.settingRow("Name", "What this room is called, here and in Home Assistant.",
+            `<input type="text" class="wide" name="name" value="${escapeHtml(draft.name || "")}">`,
+            { problem: this.problems.name })}
+        </div></div>
+
+        <div class="group"><div class="label">Sensors</div><div class="rows">
+          ${this.settingRow("Temperature sensor",
+            "The reason this integration exists: the room is controlled against this, never against the air conditioner's own sensor.",
+            this.chooser("temperature_sensor", ["sensor", "input_number", "number"], "temperature"),
+            { entity: draft.temperature_sensor, problem: this.problems.temperature_sensor })}
+          ${this.settingRow(`Humidity sensor <span class="optional">optional</span>`, "",
+            this.chooser("humidity_sensor", ["sensor", "input_number", "number"], "humidity", "Change", true),
+            { entity: draft.humidity_sensor })}
+        </div></div>
+
+        <div class="group"><div class="label">Equipment</div><div class="rows">
+          ${this.settingRow("Air conditioner",
+            "Any climate entity. Its fan, swing and preset lists are mirrored rather than replaced.",
+            this.chooser("cooler", ["climate"], null, "Change", true),
+            { entity: draft.cooler, problem: this.problems.cooler })}
+          <div class="row-setting">
+            <div class="what">
+              <div class="name">Heaters</div>
+              ${heaters.length
+                ? heaters.map((entity) =>
+                    `<div class="entity" title="${escapeHtml(entity)}">${escapeHtml(this.entityName(entity))}
+                      <button type="button" class="quiet tiny" data-drop-heater="${escapeHtml(entity)}" title="Remove">✕</button>
+                    </div>`).join("")
+                : `<div class="entity none">None — this room cools only</div>`}
+              <div class="why">A radiator valve is a valve entity, not a switch. A room may have several, and they open together.</div>
+              ${this.problems.base ? `<div class="why problem">${escapeHtml(PROBLEMS[this.problems.base])}</div>` : ""}
+            </div>
+            <div class="control">${this.chooser("heaters", ["valve", "switch", "input_boolean"], null, "Add heater")}</div>
           </div>
-          <small>Gated is for a unit whose sensor reads its own recirculated air and stops while the room is still warm.</small>
-        </label>
-        ${this.number("frost_temperature", "Frost protection", draft.frost_temperature ?? 5, "°C",
-          "Heats whatever the mode, whatever the season. A thermostat switched off must not be able to freeze a pipe.")}
-        ${this.problems.base ? `<p class="problem">${escapeHtml(PROBLEMS[this.problems.base] || this.problems.base)}</p>` : ""}
-        <div class="actions">
-          <button class="primary" type="submit" ${this.busy ? "disabled" : ""}>${isNew ? "Add room" : "Save room"}</button>
-          <button type="button" data-cancel>Cancel</button>
-          ${isNew ? "" : `<button type="button" class="danger" data-delete>Delete room</button>`}
+          ${this.settingRow("Cooling strategy",
+            "Gated is for a unit whose sensor reads its own recirculated air and stops while the room is still warm.",
+            `<div class="select-wrap"><select name="cooling_strategy">
+              <option value="gated" ${draft.cooling_strategy === "gated" ? "selected" : ""}>Park the unit and gate it on the room's sensor</option>
+              <option value="passthrough" ${draft.cooling_strategy !== "gated" ? "selected" : ""}>Let the unit run its own thermostat</option>
+            </select></div>`)}
+        </div></div>
+
+        <div class="group"><div class="label">Safety</div><div class="rows">
+          ${this.settingRow("Frost protection",
+            "Heats whatever the mode, whatever the season. A thermostat switched off must not be able to freeze a pipe.",
+            this.numberBox("frost_temperature", draft.frost_temperature ?? 5, "°C"))}
+        </div></div>
+
+        <div class="actions-bar">
+          <button class="primary" data-save-room ${this.busy ? "disabled" : ""}>${isNew ? "Add room" : "Save room"}</button>
+          <button data-go="#rooms">Cancel</button>
         </div>
-      </form>`;
+
+        ${isNew ? "" : `<div class="group danger-group"><div class="label">Danger zone</div><div class="rows">
+          ${this.settingRow("Delete this room",
+            "", `<button class="danger" data-delete>Delete room</button>`)}
+          <div class="row-setting"><div class="what"><div class="why">The sensor and the air conditioner stay; only the room and its history go.</div></div></div>
+        </div></div>`}
+      </div>
+
+      ${isNew ? "<div></div>" : `<div class="column" data-inspector>
+        ${this.roomInspector(draft, live)}
+        <div class="aside-note">Seasons are decided once for the whole house. This room has no
+          seasonal settings of its own — they live on <a class="link" data-go="#house">House</a>.</div>
+      </div>`}
+    </div>`;
   }
 
-  /** The heating season sensor, which is the only thing that knows the average. */
+  roomInspector(room, live) {
+    if (!live) return "";
+    return `<div class="inspector">
+      <div class="cap">Right now</div>
+      <div class="now">
+        <p class="reading"><b data-temp>${number(live.temperature)}</b><span class="unit">°C</span>
+          <span class="hum" data-hum>${live.humidity === undefined || live.humidity === null ? "" : `${Math.round(live.humidity)}&thinsp;% RH`}</span></p>
+        <div class="control-row" style="padding:0">
+          <span class="dot" data-dot style="background:${live.tone.dot}"></span>
+          <span class="doing" data-doing>${escapeHtml(live.doing)}</span>
+        </div>
+      </div>
+      <div class="facts">
+        <div><span class="what">Mode</span><span>${MODES[live.mode] || live.mode}</span></div>
+        <div><span class="what">Target</span><span>${live.target === undefined || live.target === null ? "—" : `${number(live.target)} °C`}</span></div>
+        <div><span class="what">Season</span><span>${this.seasonWord()}</span></div>
+        <div><span class="what">Frost protection</span><span>${number(room.frost_temperature ?? 5)} °C</span></div>
+      </div>
+    </div>`;
+  }
+
+  refreshInspector() {
+    const root = this.shadowRoot.querySelector("[data-inspector]");
+    if (!root || !this.draft) return;
+    const live = this.liveOf(this.draft);
+    const set = (selector, value) => {
+      const node = root.querySelector(selector);
+      if (node && node.textContent !== value) node.textContent = value;
+    };
+    set("[data-temp]", number(live.temperature));
+    set("[data-doing]", live.doing);
+    const dot = root.querySelector("[data-dot]");
+    if (dot) dot.style.background = live.tone.dot;
+  }
+
+  // --- the house ----------------------------------------------------------
+
   seasonSensor() {
     return Object.values(this._hass?.states || {}).find(
       (state) =>
@@ -1087,436 +1196,153 @@ class RoomThermostatPage extends HTMLElement {
     ) || null;
   }
 
-  /**
-   * What the numbers on this page currently mean, in a sentence.
-   *
-   * A threshold whose far side you cannot see is what went wrong with bright
-   * and dark on the panel: the setting was right and nobody could tell.
-   */
+  dampedNow() {
+    const value = this.seasonSensor()?.attributes?.damped;
+    return typeof value === "number" ? value : null;
+  }
+
+  seasonWord() {
+    const house = this.draftHouse || this.house;
+    if (!house.outdoor_sensor) return "Not decided";
+    const sensor = this.seasonSensor();
+    if (!sensor) return "Waiting for a reading";
+    return sensor.state === "on" ? "Heating season" : "Out of season";
+  }
+
   seasonExplainer() {
     const house = this.draftHouse || this.house;
     if (!house.outdoor_sensor) {
-      return `<div class="foot">No outdoor temperature is set, so nothing is held
-        back: every room heats and cools exactly as it would have before.</div>`;
+      return `No outdoor temperature is set, so nothing is held back: every room
+        heats and cools exactly as it would have before.`;
     }
-    const sensor = this.seasonSensor();
-    const damped = sensor ? Number(sensor.attributes.damped) : null;
-    if (damped === null || Number.isNaN(damped)) {
-      return `<div class="foot">Waiting for a first reading from
-        <strong>${escapeHtml(house.outdoor_sensor)}</strong>. Until one arrives
-        nothing is held back.</div>`;
+    const damped = this.dampedNow();
+    if (damped === null) {
+      return `Waiting for a first reading from
+        <b>${escapeHtml(house.outdoor_sensor)}</b>. Until one arrives nothing is held back.`;
     }
     const limit = Number(house.heat_limit);
     const hysteresis = Number(house.heat_limit_hysteresis);
-    const inSeason = sensor.state === "on";
-    const next = inSeason
-      ? `Heating is <strong>in season</strong>, and leaves once the average passes
-         ${(limit + hysteresis).toFixed(1)} °C.`
-      : `Heating is <strong>out of season</strong>, so a room below its setpoint stays
-         idle. It comes back once the average falls below ${limit.toFixed(1)} °C.`;
-    return `<div class="foot">The outdoor average is
-      <strong>${damped.toFixed(1)} °C</strong> against a limit of ${limit.toFixed(1)}.
-      ${next} A change has to last ${house.season_dwell_hours} hours — the dwell —
-      before it counts, because a mild autumn dips below the limit for a few hours
-      every night.</div>`;
+    const inSeason = this.seasonSensor()?.state === "on";
+    return `The outdoor average is <b>${number(damped)} °C</b> against a limit of
+      ${number(limit)}. Heating is <b>${inSeason ? "in season" : "out of season"}</b>,
+      ${inSeason
+        ? `so a room below its setpoint heats. It leaves once the average passes
+           ${number(limit + hysteresis)} °C.`
+        : `so a room below its setpoint stays idle. It comes back once the average
+           falls below ${number(limit)} °C.`}
+      A change has to last ${house.season_dwell_hours} hours — the dwell — before it
+      counts, because a mild autumn dips below the limit for a few hours every night.`;
   }
 
   houseTab() {
     const house = this.draftHouse || this.house;
     const dirty = this.draftHouse !== null;
-    return `<div class="page-head">
-        <h1>House</h1>
-        <p>Decided once for the whole house, from an outdoor temperature. Rooms
-        obey this; they have no seasonal settings of their own.</p>
-      </div>
-      <form class="editor house">
-        <div class="band-label">Outdoor</div>
-        ${this.entityPicker("outdoor_sensor", "Outdoor temperature", house.outdoor_sensor,
-          ["sensor", "weather", "input_number", "number"],
-          "A sensor or a weather entity. Put a sensor in shade: one in afternoon sun reads far too warm and would hold the heating off on a cold day. Leave it empty and nothing is held back at all.")}
-        ${this.seasonExplainer()}
-
-        <div class="band-label">Heating season</div>
-        ${this.number("heat_limit", "Heating stops above", house.heat_limit, "°C",
-          "The outdoor average above which the house heats itself — sun, cooking, bodies. Around 16 for an insulated house, higher for an old one.")}
-        ${this.number("heat_limit_hysteresis", "Heating restarts this far below", house.heat_limit_hysteresis, "K")}
-        ${this.number("damping_hours", "Averaging time", house.damping_hours, "hours",
-          "The heating decision follows an average rather than the reading, so one warm afternoon does not end the season. Longer suits a heavy masonry house.")}
-        ${this.number("season_dwell_hours", "A change must last", house.season_dwell_hours, "hours",
-          "A mild autumn dips below the limit for a few hours every night. Nothing changes until it has lasted this long.")}
-
-        <div class="band-label">Cooling season</div>
-        ${this.number("cool_limit", "Cooling stops below", house.cool_limit, "°C",
-          "Judged on the live reading rather than the average: a sunny afternoon in an otherwise cold week still overheats a room that afternoon.")}
-        ${this.number("cool_limit_hysteresis", "Cooling restarts this far above", house.cool_limit_hysteresis, "K")}
-
-        <div class="band-label">When the weather is wrong</div>
-        ${this.number("heat_override", "Heat anyway this far below setpoint", house.heat_override, "K",
-          "The weather is a guess and the room's own thermometer is not. Keep this well below your setpoint, or it will heat on the very evenings the limit exists to prevent.")}
-        ${this.number("cool_override", "Cool anyway this far above setpoint", house.cool_override, "K")}
-
-        <div class="actions">
-          <button class="primary" type="submit" ${this.busy || !dirty ? "disabled" : ""}>Save the house</button>
-          ${dirty ? `<button type="button" data-revert>Revert</button>` : `<span class="save-state">No unsaved changes</span>`}
-        </div>
-      </form>`;
-  }
-
-  async loadHistory() {
-    this.history = null;
-    this.render();
-    try {
-      this.history = await this.call({
-        type: "room_thermostat/history",
-        span: this.span,
-      });
-      this.error = "";
-    } catch (err) {
-      this.error = err?.message || "Could not read the history";
-    }
-    this.render();
-  }
-
-  /**
-   * A path through bucketed values, broken wherever there is a gap.
-   *
-   * A sensor that was offline did not read zero, so joining across a gap
-   * draws a plunge that never happened. Each run of real values is its own
-   * move-and-line.
-   */
-  path(points, x, y) {
-    let d = "";
-    let open = false;
-    points.forEach((value, index) => {
-      if (value === null || value === undefined) {
-        open = false;
-        return;
-      }
-      d += `${open ? "L" : "M"}${x(index).toFixed(1)},${y(value).toFixed(1)} `;
-      open = true;
-    });
-    return d.trim();
-  }
-
-  timelineSeries(data) {
-    const rooms = Object.entries(data.series.rooms);
-    return [
-      { key: "outdoor", label: "Outdoor", points: data.series.outdoor, className: "outdoor" },
-      { key: "damped", label: "Outdoor average", points: data.series.damped, className: "damped" },
-      ...rooms.map(([id, room], index) => ({
-        key: id,
-        label: room.name,
-        points: room.points,
-        className: `room room-${(index % 3) + 1}`,
-      })),
-    ];
-  }
-
-  timeline(data) {
-    const width = 960;
-    const height = 280;
-    const pad = { left: 40, right: 14, top: 14, bottom: 26 };
-    const house = this.house;
     const limit = Number(house.heat_limit);
-    const hysteresis = Number(house.heat_limit_hysteresis);
-    const shown = this.timelineSeries(data).filter((line) => !this.hiddenSeries.has(line.key));
-    const values = shown
-      .flatMap((line) => line.points)
-      .filter((value) => value !== null && value !== undefined);
-    if (!values.length) {
-      return `<div class="chart"><p class="muted">Nothing recorded over this span yet.</p></div>`;
-    }
-    const low = Math.floor(Math.min(limit - 2, ...values));
-    const high = Math.ceil(Math.max(limit + hysteresis + 2, ...values));
-    const x = (index) =>
-      pad.left + (index / Math.max(1, data.buckets - 1)) * (width - pad.left - pad.right);
-    const y = (value) =>
-      pad.top + (1 - (value - low) / Math.max(1, high - low)) * (height - pad.top - pad.bottom);
-    // Everything the crosshair needs to answer a hover, kept beside the
-    // drawing rather than recomputed from the DOM.
-    this.plot = { data, shown, width, height, pad, low, high };
+    const damped = this.dampedNow();
+    return `<div class="page split">
+      <div class="column">
+        <div class="page-head"><div class="grow"><h1>House</h1>
+          <p>Decided once for the whole house, from an outdoor temperature. Rooms obey
+          this; they have no seasonal settings of their own.</p></div></div>
 
-    return `<div class="chart">
-      <svg viewBox="0 0 ${width} ${height}" role="img" data-timeline
-           aria-label="Outdoor and indoor temperatures against the heating limit">
-        <rect class="hysteresis-band" x="${pad.left}" y="${y(limit + hysteresis).toFixed(1)}"
-              width="${width - pad.left - pad.right}"
-              height="${Math.max(1, y(limit) - y(limit + hysteresis)).toFixed(1)}"></rect>
-        <line class="limit" x1="${pad.left}" x2="${width - pad.right}"
-              y1="${y(limit).toFixed(1)}" y2="${y(limit).toFixed(1)}"></line>
-        ${shown.map((line) =>
-          `<path class="line ${line.className}" d="${this.path(line.points, x, y)}"></path>`).join("")}
-        <text class="axis" x="4" y="${(y(high) + 8).toFixed(1)}">${high}</text>
-        <text class="axis" x="4" y="${y(limit).toFixed(1)}">${limit.toFixed(0)}</text>
-        <text class="axis" x="4" y="${y(low).toFixed(1)}">${low}</text>
-        <text class="axis" x="${pad.left}" y="${height - 6}">${when(data.start, this.span)}</text>
-        <text class="axis" text-anchor="end" x="${width - pad.right}" y="${height - 6}">${when(data.end, this.span)}</text>
-        <line class="crosshair" data-crosshair y1="${pad.top}" y2="${height - pad.bottom}" hidden></line>
-        <g data-crosshair-dots hidden></g>
-      </svg>
-      <div class="readout" data-readout hidden></div>
-      <ul class="legend">
-        ${this.timelineSeries(data).map((line) =>
-          `<li><button data-series="${line.key}" class="${this.hiddenSeries.has(line.key) ? "off" : ""}">
-            <span class="swatch ${line.className}"></span>${escapeHtml(line.label)}
-          </button></li>`).join("")}
-      </ul>
-    </div>`;
-  }
+        <div class="group"><div class="label">Outdoor</div><div class="rows">
+          ${this.settingRow("Outdoor temperature",
+            "A sensor or a weather entity. Put a sensor in shade: one in afternoon sun reads far too warm and would hold the heating off on a cold day. Leave it empty and nothing is held back at all.",
+            this.chooser("outdoor_sensor", ["sensor", "weather", "input_number", "number"], null, "Change", true),
+            { entity: house.outdoor_sensor })}
+        </div></div>
 
-  /** The season spans as one value per bucket, to sit under the same axis. */
-  seasonBuckets(data) {
-    const width = (data.end - data.start) / data.buckets;
-    return Array.from({ length: data.buckets }, (_, index) => {
-      const at = data.start + (index + 0.5) * width;
-      return data.seasons.some(([from, to]) => at >= from && at < to) ? 1 : 0;
-    });
-  }
+        <div class="group"><div class="label">Heating season</div><div class="rows">
+          ${this.settingRow("Heating stops above",
+            "The outdoor average above which the house heats itself — sun, cooking, bodies. Around 16 for an insulated house, higher for an old one.",
+            this.numberBox("heat_limit", house.heat_limit, "°C"))}
+          ${this.settingRow("Heating restarts this far below", "",
+            this.numberBox("heat_limit_hysteresis", house.heat_limit_hysteresis, "K"))}
+          ${this.settingRow("Averaging time",
+            "The heating decision follows an average rather than the reading, so one warm afternoon does not end the season. Longer suits a heavy masonry house.",
+            this.numberBox("damping_hours", house.damping_hours, "hours"))}
+          ${this.settingRow("A change must last",
+            "A mild autumn dips below the limit for a few hours every night. Nothing changes until it has lasted this long.",
+            this.numberBox("season_dwell_hours", house.season_dwell_hours, "hours"))}
+        </div></div>
 
-  /**
-   * Which bucket a pointer is over, and what every line reads there.
-   *
-   * A chart you cannot interrogate is a picture. The numbers are the reason
-   * to open it.
-   */
-  bindTimeline(root) {
-    const svg = root.querySelector("[data-timeline]");
-    const plot = this.plot;
-    if (!svg || !plot) return;
-    const line = svg.querySelector("[data-crosshair]");
-    const dots = svg.querySelector("[data-crosshair-dots]");
-    const readout = root.querySelector("[data-readout]");
-    const { data, shown, width, height, pad, low, high } = plot;
-    const x = (index) =>
-      pad.left + (index / Math.max(1, data.buckets - 1)) * (width - pad.left - pad.right);
-    const y = (value) =>
-      pad.top + (1 - (value - low) / Math.max(1, high - low)) * (height - pad.top - pad.bottom);
+        <div class="group"><div class="label">Cooling season</div><div class="rows">
+          ${this.settingRow("Cooling stops below",
+            "Judged on the live reading rather than the average: a sunny afternoon in an otherwise cold week still overheats a room that afternoon.",
+            this.numberBox("cool_limit", house.cool_limit, "°C"))}
+          ${this.settingRow("Cooling restarts this far above", "",
+            this.numberBox("cool_limit_hysteresis", house.cool_limit_hysteresis, "K"))}
+        </div></div>
 
-    const hide = () => {
-      line.setAttribute("hidden", "");
-      dots.setAttribute("hidden", "");
-      readout.setAttribute("hidden", "");
-    };
+        <div class="group"><div class="label">When the weather is wrong</div><div class="rows">
+          ${this.settingRow("Heat anyway this far below setpoint",
+            "The weather is a guess and the room's own thermometer is not. Keep this well below your setpoint, or it will heat on the very evenings the limit exists to prevent.",
+            this.numberBox("heat_override", house.heat_override, "K"))}
+          ${this.settingRow("Cool anyway this far above setpoint", "",
+            this.numberBox("cool_override", house.cool_override, "K"))}
+        </div></div>
 
-    const show = (event) => {
-      const box = svg.getBoundingClientRect();
-      // The viewBox scales: a pointer's pixel is not the chart's unit.
-      const at = ((event.clientX - box.left) / box.width) * width;
-      const index = Math.round(
-        ((at - pad.left) / Math.max(1, width - pad.left - pad.right)) * (data.buckets - 1));
-      if (index < 0 || index >= data.buckets) return hide();
-
-      line.setAttribute("x1", x(index).toFixed(1));
-      line.setAttribute("x2", x(index).toFixed(1));
-      line.removeAttribute("hidden");
-
-      const readings = shown
-        .map((series) => ({ series, value: series.points[index] }))
-        .filter((row) => row.value !== null && row.value !== undefined);
-      dots.innerHTML = readings.map((row) =>
-        `<circle class="crosshair-dot ${row.series.className}" r="3"
-                 cx="${x(index).toFixed(1)}" cy="${y(row.value).toFixed(1)}"></circle>`).join("");
-      dots.removeAttribute("hidden");
-
-      const moment = data.start + ((data.end - data.start) * index) / Math.max(1, data.buckets - 1);
-      readout.innerHTML = `<p class="when">${moment_label(moment)}</p>
-        ${readings.map((row) =>
-          `<p><span class="swatch ${row.series.className}"></span>
-             ${escapeHtml(row.series.label)}
-             <strong>${row.value.toFixed(1)} °C</strong></p>`).join("")
-          || `<p class="muted">Nothing recorded here.</p>`}`;
-      // Kept inside the chart: a readout that follows the pointer off the
-      // right-hand edge widens the page.
-      const side = index > data.buckets / 2 ? "left" : "right";
-      readout.dataset.side = side;
-      readout.style.left = side === "right"
-        ? `${((x(index) / width) * 100).toFixed(2)}%`
-        : "auto";
-      readout.style.right = side === "left"
-        ? `${(100 - (x(index) / width) * 100).toFixed(2)}%`
-        : "auto";
-      readout.removeAttribute("hidden");
-    };
-
-    svg.addEventListener("pointermove", show);
-    svg.addEventListener("pointerdown", show);
-    svg.addEventListener("pointerleave", hide);
-  }
-
-  demandRows(data) {
-    const rooms = Object.entries(data.demand);
-    // The season goes here rather than as a wash behind the chart: a block
-    // that size was the loudest thing on a plot of thin lines, and down here
-    // it sits under the same axis and says its own name.
-    const season = `<div class="demand-row season">
-      <span class="demand-name">Heating season</span>
-      <span class="bars">${this.seasonBuckets(data).map((value) =>
-        `<i style="opacity:${value ? 1 : 0.06}"></i>`).join("")}</span>
-    </div>`;
-    if (!rooms.length) return `<div class="demand">${season}</div>`;
-    return `<div class="demand">
-      ${season}
-      ${rooms.map(([roomId, points]) => {
-        const name = data.series.rooms[roomId]?.name || roomId;
-        return `<div class="demand-row">
-          <span class="demand-name">${escapeHtml(name)}</span>
-          <span class="bars">${points.map((value) =>
-            `<i style="opacity:${value === null || value === undefined ? 0 : Math.max(0.06, value).toFixed(2)}"></i>`).join("")}</span>
-        </div>`;
-      }).join("")}
-    </div>`;
-  }
-
-  /** The fitted line's height at an outdoor temperature, for drawing it. */
-  hoursAt(days, outdoor) {
-    const used = days.filter((day) => day.hours > 0);
-    if (used.length < 3) return 0;
-    const count = used.length;
-    const meanX = used.reduce((total, day) => total + day.outdoor, 0) / count;
-    const meanY = used.reduce((total, day) => total + day.hours, 0) / count;
-    const covariance = used.reduce(
-      (total, day) => total + (day.outdoor - meanX) * (day.hours - meanY), 0);
-    const variance = used.reduce((total, day) => total + (day.outdoor - meanX) ** 2, 0);
-    if (!variance) return meanY;
-    return Math.max(0, meanY + (covariance / variance) * (outdoor - meanX));
-  }
-
-  /**
-   * One dot per day: hours of heating against that day's mean outdoor
-   * temperature. Every heated building draws this line, and where it reaches
-   * zero is the balance point — the temperature above which the house holds
-   * itself, measured from days actually lived through rather than estimated.
-   */
-  signature(data) {
-    const days = data.daily || [];
-    const limit = Number(this.house.heat_limit);
-    if (days.length < 10) {
-      return `<section class="signature">
-        <h3>Energy signature</h3>
-        <p class="muted">One dot per day: hours of heating against that day's
-        mean outdoor temperature. Where the line reaches zero is this house's
-        balance point — the outdoor temperature above which it holds itself,
-        which is what the heating limit of ${limit.toFixed(1)} °C is meant to be
-        and is currently a figure out of a book. It needs a few weeks of heating
-        weather before it can say anything; ${days.length}
-        day${days.length === 1 ? "" : "s"} so far.</p>
-      </section>`;
-    }
-    const width = 560;
-    const height = 280;
-    const pad = { left: 44, right: 16, top: 16, bottom: 30 };
-    const maxHours = Math.max(6, ...days.map((day) => day.hours));
-    const measured = data.balance_point;
-    const outs = days.map((day) => day.outdoor);
-    const minOut = Math.floor(Math.min(...outs));
-    const maxOut = Math.ceil(Math.max(...outs, measured ?? -Infinity, limit));
-    const x = (value) =>
-      pad.left + ((value - minOut) / Math.max(1, maxOut - minOut)) * (width - pad.left - pad.right);
-    const y = (value) =>
-      pad.top + (1 - value / maxHours) * (height - pad.top - pad.bottom);
-
-    const fit = measured === null || measured === undefined
-      ? ""
-      : `<line class="fit" x1="${x(minOut).toFixed(1)}" y1="${y(this.hoursAt(days, minOut)).toFixed(1)}"
-               x2="${x(measured).toFixed(1)}" y2="${y(0).toFixed(1)}"></line>
-         <line class="measured" x1="${x(measured).toFixed(1)}" x2="${x(measured).toFixed(1)}"
-               y1="${pad.top}" y2="${y(0).toFixed(1)}"></line>`;
-
-    const verdict = measured === null || measured === undefined
-      ? `<p class="muted">Not enough days that used heat to draw a line through yet.</p>`
-      : `<p>Measured balance point <strong>${measured.toFixed(1)} °C</strong>, against a
-         heating limit of ${limit.toFixed(1)}. ${
-          Math.abs(measured - limit) < 0.5
-            ? "Your limit is where this house says it should be."
-            : measured < limit
-              ? `The house holds itself ${(limit - measured).toFixed(1)} °C colder than the
-                 limit assumes, so heating runs on days it need not.`
-              : `The house wants heat ${(measured - limit).toFixed(1)} °C warmer than the
-                 limit allows, so it is held back on days it would use it.`}</p>`;
-
-    return `<section class="signature">
-      <h3>Energy signature</h3>
-      <div class="chart">
-        <svg viewBox="0 0 ${width} ${height}" role="img"
-             aria-label="Heating hours per day against that day's mean outdoor temperature">
-          <line class="limit" x1="${x(limit).toFixed(1)}" x2="${x(limit).toFixed(1)}"
-                y1="${pad.top}" y2="${y(0).toFixed(1)}"></line>
-          <text class="axis" text-anchor="middle" x="${x(limit).toFixed(1)}" y="${(pad.top + 10).toFixed(1)}">limit</text>
-          ${fit}
-          ${days.map((day) =>
-            `<circle class="day" cx="${x(day.outdoor).toFixed(1)}" cy="${y(day.hours).toFixed(1)}" r="3"></circle>`).join("")}
-          <line class="axis-line" x1="${pad.left}" x2="${width - pad.right}"
-                y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}"></line>
-          <text class="axis" x="4" y="${(y(maxHours) + 8).toFixed(1)}">${maxHours.toFixed(0)} h</text>
-          <text class="axis" x="4" y="${y(0).toFixed(1)}">0</text>
-          <text class="axis" x="${x(minOut).toFixed(1)}" y="${height - 8}">${minOut} °C</text>
-          <text class="axis" text-anchor="end" x="${x(maxOut).toFixed(1)}" y="${height - 8}">${maxOut} °C</text>
-          ${measured === null || measured === undefined ? "" :
-            `<text class="axis measured-label" text-anchor="middle" x="${x(measured).toFixed(1)}" y="${height - 8}">${measured.toFixed(1)}</text>
-             <text class="axis measured-label" text-anchor="middle" x="${x(measured).toFixed(1)}" y="${(pad.top + 10).toFixed(1)}">measured</text>`}
-        </svg>
+        <div class="actions-bar">
+          <button class="primary" data-save-house ${this.busy || !dirty ? "disabled" : ""}>Save the house</button>
+          ${dirty ? `<button data-revert-house>Revert</button>`
+                  : `<span class="save-state">No unsaved changes</span>`}
+        </div>
       </div>
-      ${verdict}
-    </section>`;
-  }
 
-  /**
-   * The rooms against each other. Counting, not modelling — and it points at
-   * which room is the problem without pretending to know why.
-   */
-  roomTable(data) {
-    const rows = Object.entries(data.demand).map(([roomId, points]) => {
-      const room = data.series.rooms[roomId];
-      const ran = points.filter((value) => value).length;
-      const readings = (room?.points || []).filter((value) => value !== null && value !== undefined);
-      const low = readings.length ? Math.min(...readings) : null;
-      const high = readings.length ? Math.max(...readings) : null;
-      return {
-        name: room?.name || roomId,
-        ran: Math.round((ran / Math.max(1, data.buckets)) * 100),
-        low, high,
-        swing: low === null ? null : high - low,
-      };
-    }).sort((first, second) => second.ran - first.ran);
-    if (!rows.length) return "";
-    return `<table class="rooms-table">
-      <thead><tr><th>Room</th><th>Ran</th><th>Coldest</th><th>Warmest</th><th>Swing</th></tr></thead>
-      <tbody>${rows.map((row) => `<tr>
-        <td>${escapeHtml(row.name)}</td>
-        <td>${row.ran} %</td>
-        <td>${row.low === null ? "—" : row.low.toFixed(1)}</td>
-        <td>${row.high === null ? "—" : row.high.toFixed(1)}</td>
-        <td>${row.swing === null ? "—" : row.swing.toFixed(1)}</td>
-      </tr>`).join("")}</tbody>
-    </table>`;
-  }
-
-  historyTab() {
-    const spans = `<nav class="spans">
-      ${["24h", "7d", "30d", "90d"].map((span) =>
-        `<button data-span="${span}" class="${span === this.span ? "active" : ""}">${span}</button>`).join("")}
-    </nav>`;
-    if (!this.history) {
-      return `<div class="page-head"><h1>History</h1></div>${spans}
-        <p class="muted">Reading the history…</p>`;
-    }
-    const data = this.history;
-    return `<div class="page-head">
-        <h1>History</h1>
-        <p>One time axis: what it was like outside, what each room read, and
-        when the heating ran. The band is the hysteresis around the heating
-        limit — the average has to cross the whole of it to change the season.</p>
+      <div class="column" data-inspector>
+        <div class="inspector">
+          <div class="cap">The decision right now</div>
+          <div class="now">
+            <p class="reading"><b>${number(damped)}</b><span class="unit">°C</span>
+              <span class="hum">outdoor average</span></p>
+            <div class="control-row" style="padding:0">
+              <span class="dot" style="background:${this.seasonSensor()?.state === "on" ? TONE.running.dot : TONE.idle.dot}"></span>
+              <span style="font:600 14px/1.3 var(--font)">${this.seasonWord()}</span>
+            </div>
+          </div>
+          <div class="facts">
+            <div><span class="what">Heating limit</span><span>${number(limit)} °C</span></div>
+            <div><span class="what">Leaves above</span><span>${number(limit + Number(house.heat_limit_hysteresis))} °C</span></div>
+            <div><span class="what">Dwell</span><span>${house.season_dwell_hours} hours</span></div>
+            <div><span class="what">Rooms obeying</span><span>${this.rooms.length}</span></div>
+          </div>
+          <div class="note">${this.seasonExplainer()}</div>
+        </div>
+        <div class="aside-note">Frost protection is per room and ignores all of this.
+          See <a class="link" data-go="#rooms">Rooms</a>.</div>
       </div>
-      <div class="history">
-        ${spans}
-        ${this.timeline(data)}
-        ${this.demandRows(data)}
-        ${this.signature(data)}
-        ${this.roomTable(data)}
-      </div>`;
+    </div>`;
   }
 
-  /** The draft as the record wants it: lists as lists, numbers as numbers. */
+  // --- writing ------------------------------------------------------------
+
+  housePayload() {
+    const draft = { ...(this.draftHouse || {}) };
+    if (draft.outdoor_sensor !== undefined && !String(draft.outdoor_sensor ?? "").trim()) {
+      // Clearing it is how seasons are switched off, so a null has to travel.
+      draft.outdoor_sensor = null;
+    }
+    for (const key of Object.keys(draft)) {
+      if (key !== "outdoor_sensor" && draft[key] !== null) draft[key] = Number(draft[key]);
+    }
+    return draft;
+  }
+
+  async saveHouse() {
+    this.busy = true;
+    this.renderBody();
+    try {
+      await this.call({ type: "room_thermostat/house/update", house: this.housePayload() });
+      this.draftHouse = null;
+      this.busy = false;
+      await this.load();
+    } catch (err) {
+      this.error = err?.message || "Could not save the house";
+      this.busy = false;
+      this.renderBody();
+    }
+  }
+
   roomPayload() {
     const draft = { ...this.draft };
     draft.heaters = (draft.heaters || []).filter(Boolean);
@@ -1532,14 +1358,12 @@ class RoomThermostatPage extends HTMLElement {
   async saveRoom() {
     this.busy = true;
     this.problems = {};
-    this.render();
+    this.renderBody();
     const payload = this.roomPayload();
     try {
       if (payload.id) {
         await this.call({
-          type: "room_thermostat/rooms/update",
-          room_id: payload.id,
-          room: payload,
+          type: "room_thermostat/rooms/update", room_id: payload.id, room: payload,
         });
       } else {
         await this.call({ type: "room_thermostat/rooms/create", room: payload });
@@ -1554,149 +1378,668 @@ class RoomThermostatPage extends HTMLElement {
         this.error = err?.message || "Could not save that room";
       }
       this.busy = false;
-      this.render();
+      this.renderBody();
     }
   }
 
   async deleteRoom() {
     const name = this.draft?.name || "this room";
-    // Irreversible, and it takes the device and the entities with it.
     if (!window.confirm(`Delete ${name}? Its thermostat, its sensors and its device go with it.`)) return;
     this.busy = true;
-    this.render();
+    this.renderBody();
     try {
-      await this.call({
-        type: "room_thermostat/rooms/delete",
-        room_id: this.draft.id,
-      });
+      await this.call({ type: "room_thermostat/rooms/delete", room_id: this.draft.id });
       this.busy = false;
       await this.load();
       this.go("#rooms");
     } catch (err) {
       this.error = err?.message || "Could not delete that room";
       this.busy = false;
-      this.render();
+      this.renderBody();
     }
   }
 
-  /** The draft as the record wants it: numbers as numbers, an empty source
-   *  as null, because clearing it is how seasons are switched off. */
-  housePayload() {
-    const draft = { ...(this.draftHouse || {}) };
-    if (draft.outdoor_sensor !== undefined && !String(draft.outdoor_sensor).trim()) {
-      draft.outdoor_sensor = null;
-    }
-    for (const key of Object.keys(draft)) {
-      if (key !== "outdoor_sensor" && draft[key] !== null) draft[key] = Number(draft[key]);
-    }
-    return draft;
-  }
-
-  async saveHouse() {
-    this.busy = true;
-    this.render();
-    try {
-      await this.call({
-        type: "room_thermostat/house/update",
-        house: this.housePayload(),
-      });
-      this.draftHouse = null;
-      this.busy = false;
-      await this.load();
-    } catch (err) {
-      this.error = err?.message || "Could not save the house";
-      this.busy = false;
-      this.render();
-    }
-  }
-
-  bindPickers(root) {
-    root.querySelectorAll("[data-entity-search]").forEach((input) => {
-      const picker = input.closest(".entity-picker");
-      const results = picker?.querySelector(".entity-results");
-      const hidden = picker?.querySelector("input[type=hidden]");
-
-      const filter = (query = input.value.trim().toLowerCase()) => {
-        let shown = 0;
-        results?.querySelectorAll("[data-entity-option]").forEach((option) => {
-          // Capped: a house has thousands of entities and a list that long is
-          // slower to draw than it is to scroll.
-          const visible = (!query || option.dataset.entityTerms.includes(query)) && shown < 60;
-          option.toggleAttribute("hidden", !visible);
-          if (visible) shown += 1;
-        });
-        if (results) results.hidden = false;
-      };
-
-      /*
-       * Opening shows everything and selects what is there, rather than
-       * filtering by the name already chosen. Filtering by it offers one
-       * result — the thing you already have — which is the least useful list
-       * possible when what you want is to change it.
-       */
-      const open = () => {
-        input.select();
-        filter("");
-      };
-      // Focus is how a keyboard reaches it; click is how a pointer does, and
-      // a pointer clicking an already-focused field expects the list back.
-      input.addEventListener("focus", open);
-      input.addEventListener("click", open);
-      input.addEventListener("input", () => {
-        // Typing invalidates the choice. A half-typed search must never be
-        // saved as though it were an entity id.
-        if (hidden) {
-          hidden.value = "";
-          this.takePicker(hidden);
-        }
-        filter();
-      });
-
-      results?.querySelectorAll("[data-entity-option]").forEach((option) => {
-        option.addEventListener("click", () => {
-          if (hidden) {
-            hidden.value = option.dataset.entityOption;
-            this.takePicker(hidden);
-          }
-          input.value = option.dataset.entityLabel;
-          results.hidden = true;
-          // A list gains an empty row as soon as its last one is filled.
-          if (hidden?.dataset.listValue) this.render();
-        });
-      });
-    });
-
-    // Clicking anywhere else closes whichever list is open.
-    root.addEventListener("pointerdown", (event) => {
-      const inside = event.composedPath().find(
-        (node) => node?.classList?.contains("entity-picker"));
-      root.querySelectorAll(".entity-results:not([hidden])").forEach((results) => {
-        if (results.closest(".entity-picker") !== inside) results.hidden = true;
-      });
-    }, true);
-  }
-
-  /** A picker's hidden input, written into whichever draft is open. */
-  takePicker(hidden) {
-    const list = hidden.dataset.listValue;
-    if (list) {
-      const values = [...this.shadowRoot.querySelectorAll(`[data-list-value="${list}"]`)]
-        .map((input) => input.value)
-        .filter(Boolean);
-      this.draft = { ...(this.draft || {}), [list]: values };
-      return;
-    }
-    this.take(hidden);
-  }
-
+  /** A field's value, into whichever draft is open. */
   take(field) {
     if (!field?.name) return;
     const value = field.type === "checkbox" ? field.checked : field.value;
     if (this.tab === "house" && !this.editing) {
       this.draftHouse = { ...(this.draftHouse || this.house), [field.name]: value };
+      const save = this.shadowRoot.querySelector("[data-save-house]");
+      if (save) save.disabled = false;
     } else {
       this.draft = { ...(this.draft || {}), [field.name]: value };
     }
+  }
+
+  /** What a picker chose, into whichever draft is open. */
+  chose(name, entityId) {
+    if (name === "heaters") {
+      const current = this.draft?.heaters || [];
+      if (!current.includes(entityId)) {
+        this.draft = { ...this.draft, heaters: [...current, entityId] };
+      }
+    } else if (this.tab === "house" && !this.editing) {
+      this.draftHouse = { ...(this.draftHouse || this.house), [name]: entityId };
+    } else {
+      this.draft = { ...(this.draft || {}), [name]: entityId };
+    }
+    this.picking = null;
+    this.renderBody();
+  }
+
+  // --- history ------------------------------------------------------------
+
+  async loadHistory() {
+    try {
+      this.history = await this.call({ type: "room_thermostat/history", span: this.span });
+      this.error = "";
+    } catch (err) {
+      this.error = err?.message || "Could not read the history";
+    }
+    if (this.tab === "history") this.renderBody();
+  }
+
+  /** What each room was set to, which the record does not keep. */
+  setpointOf(roomId) {
+    const room = this.rooms.find((item) => item.id === roomId);
+    const live = room ? this.liveOf(room) : null;
+    const target = live?.target;
+    return typeof target === "number" ? target : null;
+  }
+
+  /**
+   * Everything the three lanes and the tables are drawn from.
+   *
+   * Computed here rather than asked for: the answer already carries the
+   * outdoor series, the average, the season spans and each room's demand, and
+   * every number below is arithmetic over those.
+   */
+  lanes() {
+    const data = this.history;
+    const house = this.house;
+    const limit = Number(house.heat_limit);
+    const hysteresis = Number(house.heat_limit_hysteresis);
+    const count = data.buckets;
+    const hours = (data.end - data.start) / 3600;
+    const perBucket = hours / count;
+
+    const inSeason = Array.from({ length: count }, (_, index) => {
+      const at = data.start + ((data.end - data.start) * (index + 0.5)) / count;
+      return data.seasons.some(([from, to]) => at >= from && at < to);
+    });
+
+    const rooms = Object.entries(data.series.rooms).map(([id, room], index) => {
+      const setpoint = this.setpointOf(id);
+      // A room switched off is not being held back by the season; it is off
+      // because somebody turned it off. Counting that as what the rule cost
+      // would paint the whole lane red on a house with the heating away.
+      const asking = ["heat", "heat_cool"].includes(
+        this.liveOf(this.rooms.find((item) => item.id === id) || {}).mode);
+      const demand = data.demand[id] || [];
+      const ran = demand.map((value) => Boolean(value));
+      const readings = room.points;
+      // Below setpoint while nothing ran: what the season rule cost.
+      const left = readings.map((value, i) =>
+        asking && value !== null && setpoint !== null && !ran[i] && value < setpoint - 0.15);
+      let ranHours = 0;
+      let leftHours = 0;
+      let degreeHours = 0;
+      readings.forEach((value, i) => {
+        if (ran[i]) ranHours += perBucket;
+        if (left[i]) {
+          leftHours += perBucket;
+          degreeHours += Math.abs(value - setpoint) * perBucket;
+        }
+      });
+      const seen = readings.filter((value) => value !== null);
+      return {
+        id, name: room.name, points: readings, setpoint, ran, left, asking,
+        colour: ROOM_COLOURS[index % ROOM_COLOURS.length],
+        ranHours, leftHours, degreeHours,
+        low: seen.length ? Math.min(...seen) : null,
+        high: seen.length ? Math.max(...seen) : null,
+        ranShare: count ? Math.round((ran.filter(Boolean).length / count) * 100) : 0,
+      };
+    });
+
+    return { data, limit, hysteresis, count, hours, perBucket, inSeason, rooms };
+  }
+
+  /** The same window replayed against other limits, with the dwell ignored. */
+  whatIf(model) {
+    const damped = model.data.series.damped;
+    const known = damped.filter((value) => value !== null && value !== undefined);
+    if (!known.length) return [];
+    const current = model.limit;
+    const candidates = [current - 2, current - 1, current, current + 1, current + 2];
+    return candidates.map((limit) => {
+      const inSeason = damped.map((value) => value !== null && value < limit);
+      const share = Math.round((inSeason.filter(Boolean).length / model.count) * 100);
+      let run = 0;
+      let cold = 0;
+      model.rooms.forEach((room) => {
+        room.points.forEach((value, index) => {
+          if (value === null || room.setpoint === null) return;
+          const below = value < room.setpoint - 0.15;
+          if (below && inSeason[index]) run += model.perBucket;
+          if (below && !inSeason[index]) cold += model.perBucket;
+        });
+      });
+      return {
+        limit,
+        inSeason: `${share} %`,
+        run: `${run.toFixed(1)} h`,
+        cold: `${cold.toFixed(1)} h`,
+        current: Math.abs(limit - current) < 0.01,
+        note: Math.abs(limit - current) < 0.01
+          ? "what you have now"
+          : limit > current ? "warmer, and the equipment runs more"
+          : "colder, and it runs less",
+      };
+    });
+  }
+
+  laneOne(model) {
+    const { data } = model;
+    const width = 1000;
+    const height = 230;
+    const outs = [...data.series.outdoor, ...data.series.damped]
+      .filter((value) => value !== null && value !== undefined);
+    if (!outs.length) return { svg: `<p class="muted">Nothing recorded over this span yet.</p>`, top: "—", bottom: "—", limitTop: "50%" };
+    const low = Math.min(...outs, model.limit - 2.4) - 0.6;
+    const high = Math.max(...outs, model.limit + 2.4) + 0.6;
+    const y = (value) => ((high - value) / (high - low)) * height;
+    const x = (index) => (index / Math.max(1, model.count - 1)) * width;
+    const line = (points) => {
+      const parts = [];
+      let open = false;
+      points.forEach((value, index) => {
+        if (value === null || value === undefined) { open = false; return; }
+        parts.push(`${open ? "L" : "M"}${x(index).toFixed(1)},${y(value).toFixed(1)}`);
+        open = true;
+      });
+      return parts.join(" ");
+    };
+    const spans = [];
+    let from = -1;
+    model.inSeason.forEach((on, index) => {
+      if (on && from < 0) from = index;
+      if ((!on || index === model.count - 1) && from >= 0) {
+        spans.push([from, on ? index : index - 1]);
+        from = -1;
+      }
+    });
+    return {
+      top: number(high, 0), bottom: number(low, 0),
+      limitTop: `${((y(model.limit) / height) * 100).toFixed(1)}%`,
+      series: [
+        { label: "Outdoor", colour: "#5A6470", points: data.series.outdoor },
+        { label: `${this.house.damping_hours} h average`, colour: "var(--accent)", points: data.series.damped },
+      ],
+      svg: `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"
+                 style="height:230px" data-lane data-height="${height}"
+                 data-low="${low}" data-high="${high}">
+        ${spans.map(([a, b]) =>
+          `<rect x="${x(a).toFixed(1)}" y="0" width="${Math.max(1, x(b) - x(a)).toFixed(1)}"
+                 height="${height}" fill="${LANE.season}"></rect>`).join("")}
+        <rect x="0" y="${y(model.limit + model.hysteresis).toFixed(1)}" width="${width}"
+              height="${Math.max(1, y(model.limit) - y(model.limit + model.hysteresis)).toFixed(1)}"
+              fill="${LANE.band}"></rect>
+        <line x1="0" y1="${y(model.limit).toFixed(1)}" x2="${width}" y2="${y(model.limit).toFixed(1)}"
+              stroke="var(--accent-ink)" stroke-width="1" stroke-dasharray="7 6"
+              vector-effect="non-scaling-stroke"></line>
+        <path d="${line(data.series.outdoor)}" fill="none" stroke="#5A6470" stroke-width="1.5"
+              vector-effect="non-scaling-stroke"></path>
+        <path d="${line(data.series.damped)}" fill="none" stroke="var(--accent)" stroke-width="3"
+              vector-effect="non-scaling-stroke"></path>
+        <line class="crosshair" data-crosshair y1="0" y2="${height}" hidden
+              vector-effect="non-scaling-stroke"></line>
+      </svg>`,
+    };
+  }
+
+  laneTwo(model) {
+    const width = 1000;
+    const height = 170;
+    const shown = model.rooms.filter((room) => !this.hiddenSeries.has(room.id));
+    const values = shown.flatMap((room) =>
+      [...room.points.filter((value) => value !== null), room.setpoint])
+      .filter((value) => value !== null && value !== undefined);
+    if (!values.length) return { svg: `<p class="muted">No room readings over this span.</p>`, top: "—", bottom: "—" };
+    const low = Math.min(...values) - 0.8;
+    const high = Math.max(...values) + 0.8;
+    const y = (value) => ((high - value) / (high - low)) * height;
+    const x = (index) => (index / Math.max(1, model.count - 1)) * width;
+
+    // A run of buckets, closed back along the setpoint, so the gap between a
+    // room and what it was asked for is an area rather than a guess.
+    const runs = (flags) => {
+      const out = [];
+      let from = -1;
+      flags.forEach((on, index) => {
+        if (on && from < 0) from = index;
+        if (from >= 0 && (!on || index === flags.length - 1)) {
+          const to = on ? index : index - 1;
+          if (to - from >= 1) out.push([from, to]);
+          from = -1;
+        }
+      });
+      return out;
+    };
+    const area = (room, [from, to]) => {
+      const up = [];
+      for (let i = from; i <= to; i += 1) up.push(`${x(i).toFixed(1)},${y(room.points[i]).toFixed(1)}`);
+      const back = [];
+      for (let i = to; i >= from; i -= 1) back.push(`${x(i).toFixed(1)},${y(room.setpoint).toFixed(1)}`);
+      return [...up, ...back].join(" ");
+    };
+
+    return {
+      top: number(high, 0), bottom: number(low, 0),
+      series: shown.map((room) => ({ label: room.name, colour: room.colour, points: room.points })),
+      svg: `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="height:170px"
+                 data-lane data-height="${height}" data-low="${low}" data-high="${high}">
+        ${shown.filter((room) => room.setpoint !== null).flatMap((room) => [
+          ...runs(room.left).map((run) =>
+            `<polygon points="${area(room, run)}" fill="${LANE.deficit}"></polygon>`),
+          ...runs(room.ran).map((run) =>
+            `<polygon points="${area(room, run)}" fill="${LANE.ran}"></polygon>`),
+        ]).join("")}
+        ${shown.filter((room) => room.setpoint !== null).map((room) =>
+          `<line x1="0" y1="${y(room.setpoint).toFixed(1)}" x2="${width}" y2="${y(room.setpoint).toFixed(1)}"
+                 stroke="${room.colour}" stroke-width="1" stroke-dasharray="3 5" opacity="0.55"
+                 vector-effect="non-scaling-stroke"></line>`).join("")}
+        ${shown.map((room) => {
+          const parts = [];
+          let open = false;
+          room.points.forEach((value, index) => {
+            if (value === null || value === undefined) { open = false; return; }
+            parts.push(`${open ? "L" : "M"}${x(index).toFixed(1)},${y(value).toFixed(1)}`);
+            open = true;
+          });
+          return `<path d="${parts.join(" ")}" fill="none" stroke="${room.colour}"
+                        stroke-width="2" vector-effect="non-scaling-stroke"></path>`;
+        }).join("")}
+        <line class="crosshair" data-crosshair y1="0" y2="${height}" hidden
+              vector-effect="non-scaling-stroke"></line>
+      </svg>`,
+    };
+  }
+
+  historyTab() {
+    const ranges = ["24h", "7d", "30d", "90d"];
+    const picker = `<div class="ranges">${ranges.map((span) =>
+      `<button data-span="${span}" class="${span === this.span ? "active" : ""}">${span}</button>`).join("")}</div>`;
+    if (!this.history) {
+      return `<div class="page wide">
+        <div class="page-head"><div class="grow"><h1>History</h1></div></div>
+        ${picker}<p class="muted">Reading the history…</p></div>`;
+    }
+    const model = this.lanes();
+    const one = this.laneOne(model);
+    const two = this.laneTwo(model);
+    // Kept for the pointer, which reads values out of the same arrays the
+    // paths were drawn from rather than out of the DOM.
+    this.plots = [one.series || [], two.series || []];
+    this.plotWindow = { start: model.data.start, end: model.data.end, count: model.count };
+    const damped = this.dampedNow();
+    const ranHours = model.rooms.reduce((total, room) => total + room.ranHours, 0);
+    const leftHours = model.rooms.reduce((total, room) => total + room.leftHours, 0);
+    const degreeHours = model.rooms.reduce((total, room) => total + room.degreeHours, 0);
+    const inSeasonNow = this.seasonSensor()?.state === "on";
+    const margin = damped === null ? "no reading yet"
+      : `${number(Math.abs(damped - model.limit))} K ${damped > model.limit ? "above" : "below"} the limit`;
+
+    return `<div class="page wide">
+      <div class="page-head"><div class="grow"><h1>History</h1>
+        <p>Three lanes on one time axis: the weather and the season decision it drives,
+        what each room did about it, and when equipment actually ran. The band is the
+        hysteresis around the heating limit — the average has to cross the whole of it
+        to change the season. Read it downwards: the limit at the top decides everything
+        below it.</p></div></div>
+
+      ${picker}
+
+      <div class="summary">
+        <div><div class="cap">Outdoor average now</div>
+          <div class="big">${number(damped)}<span>°C</span></div>
+          <div class="under">${margin}</div></div>
+        <div><div class="cap">Season</div>
+          <div class="big">${inSeasonNow ? "Heating" : "Out of season"}</div>
+          <div class="under">${inSeasonNow ? `leaves above ${number(model.limit + model.hysteresis)} °C` : `returns below ${number(model.limit)} °C`}</div></div>
+        <div><div class="cap">Equipment ran</div>
+          <div class="big">${ranHours.toFixed(1)}<span>h</span></div>
+          <div class="under">all rooms, this window</div></div>
+        <div><div class="cap">Off target, left alone</div>
+          <div class="big">${leftHours.toFixed(1)}<span>h</span></div>
+          <div class="under">${degreeHours.toFixed(0)} K·h — what the season rule cost</div></div>
+      </div>
+
+      <div class="lanes">
+        <div class="lane-cap">1 · The season decision
+          <span class="aside">a change must last ${this.house.season_dwell_hours} hours</span></div>
+        <div class="lane">
+          <div class="gutter" style="height:230px">
+            <span style="top:0">${one.top} °C</span>
+            <span style="top:${one.limitTop};transform:translateY(-50%);color:var(--accent-ink);font-weight:600">${number(model.limit)}</span>
+            <span style="bottom:0">${one.bottom} °C</span>
+          </div>
+          <div class="plot">${one.svg}<div class="readout" data-readout hidden></div></div>
+        </div>
+        <div class="lane-key">
+          <span><i style="width:14px;height:2px;background:#5A6470"></i>outdoor reading</span>
+          <span><i style="width:14px;height:3px;background:var(--accent)"></i>${this.house.damping_hours} h average — the decision follows this</span>
+          <span><i style="width:14px;height:10px;background:${LANE.band}"></i>hysteresis, ${number(model.limit)} to ${number(model.limit + model.hysteresis)}</span>
+          <span><i style="width:14px;height:10px;background:${LANE.season}"></i>season in effect</span>
+        </div>
+
+        <div class="lane-cap">2 · What the rooms did about it
+          <span class="aside">shading is distance from setpoint</span></div>
+        <div class="lane">
+          <div class="gutter" style="height:170px">
+            <span style="top:0">${two.top} °C</span>
+            <span style="bottom:0">${two.bottom} °C</span>
+          </div>
+          <div class="plot">${two.svg}<div class="readout" data-readout hidden></div></div>
+        </div>
+        <div class="lane-key">
+          <span><i style="width:14px;height:10px;background:${LANE.deficit}"></i>below setpoint, nothing ran</span>
+          <span><i style="width:14px;height:10px;background:${LANE.ran}"></i>below setpoint, equipment ran</span>
+          <span><i style="width:14px;height:0;border-top:1px dashed var(--muted)"></i>setpoint</span>
+        </div>
+
+        <div class="lane-cap">3 · When it ran
+          <span class="aside">one cell per bucket</span></div>
+        ${model.rooms.map((room) => `<div class="strip">
+          <span class="naming"><b>${escapeHtml(room.name)}</b><small>${room.ranShare} %</small></span>
+          <span class="plot"><svg viewBox="0 0 1000 16" preserveAspectRatio="none" style="height:16px">
+            ${room.ran.map((on, index) => on
+              ? `<rect x="${((index / model.count) * 1000).toFixed(1)}" y="0"
+                       width="${(1000 / model.count).toFixed(1)}" height="16" fill="var(--accent)"></rect>`
+              : "").join("")}
+          </svg></span>
+        </div>`).join("")}
+
+        <div class="axis-row">
+          <div>${when(model.data.start, this.span)}</div>
+          <div>${when((model.data.start + model.data.end) / 2, this.span)}</div>
+          <div>${when(model.data.end, this.span)}</div>
+        </div>
+
+        <div class="legend-row">
+          ${model.rooms.map((room) =>
+            `<button data-series="${room.id}" style="color:${this.hiddenSeries.has(room.id) ? "var(--disabled)" : "var(--ink)"}">
+              <i style="background:${room.colour}"></i>${escapeHtml(room.name)}
+            </button>`).join("")}
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Where the limit would sit</h2>
+        <p>The same window replayed against other heating limits, dwell ignored. Raising
+        the limit buys comfort by running the equipment more; lowering it does the
+        reverse. Pick the row where the cold hours stop bothering you.</p>
+        <div class="grid-table what-if">
+          <div class="th">Heating limit</div><div class="th num">In season</div>
+          <div class="th num">Would run</div><div class="th num">Cold hours</div><div class="th"></div>
+          ${this.whatIf(model).map((row) => `
+            <div class="td mono" style="${row.current ? "color:var(--accent-ink)" : ""}">${number(row.limit)} °C</div>
+            <div class="td num">${row.inSeason}</div>
+            <div class="td num">${row.run}</div>
+            <div class="td num">${row.cold}</div>
+            <div class="td quiet">${row.note}</div>`).join("")}
+        </div>
+        <p class="after">Computed from this window only. A limit is a property of the house,
+        not of a week — check it again over 30 and 90 days before you move it on
+        <a class="link" data-go="#house">House</a>.</p>
+      </div>
+
+      ${this.signature(model)}
+
+      <div class="section">
+        <div class="grid-table rooms-table">
+          <div class="th">Room</div><div class="th num">Ran</div><div class="th num">Coldest</div>
+          <div class="th num">Warmest</div><div class="th num">Swing</div><div class="th num">Off target</div>
+          ${model.rooms.map((room) => `
+            <div class="td">${escapeHtml(room.name)}</div>
+            <div class="td num">${room.ranHours.toFixed(1)} h</div>
+            <div class="td num">${number(room.low)}</div>
+            <div class="td num">${number(room.high)}</div>
+            <div class="td num">${room.low === null ? "—" : number(room.high - room.low)}</div>
+            <div class="td num quiet">${room.leftHours.toFixed(1)} h</div>`).join("")}
+        </div>
+        <p class="after">Swing is warmest minus coldest — a wide swing is a room the sensor
+        and the equipment disagree about.</p>
+      </div>
+    </div>`;
+  }
+
+  signature(model) {
+    const days = model.data.daily || [];
+    const limit = model.limit;
+    const measured = model.data.balance_point;
+    const width = 640;
+    const height = 220;
+    const box = { x: [44, 628], y: [6, 186] };
+    const heatDays = days.filter((day) => day.hours > 0.25).length;
+    const note = measured === null || measured === undefined
+      ? `It needs a few weeks of heating weather before it can say anything;
+         ${heatDays} ${heatDays === 1 ? "day" : "days"} with heating in this window.`
+      : `Fitted over ${days.length} days: the balance point lands at ${number(measured)} °C
+         against your limit of ${number(limit)} °C.`;
+
+    let plot = `<text x="336" y="90" text-anchor="middle" fill="var(--disabled)"
+      font-family="var(--font)" font-size="13">not enough heating weather to fit a line</text>`;
+    let top = "—";
+    let mid = "—";
+    let from = "—";
+    let to = "—";
+    if (days.length) {
+      const temps = days.map((day) => day.temp ?? day.outdoor);
+      const lowT = Math.min(...temps) - 1;
+      const highT = Math.max(...temps) + 1;
+      const maxHours = Math.max(4, ...days.map((day) => day.hours)) * 1.2;
+      const sx = (value) => box.x[0] + ((value - lowT) / Math.max(0.5, highT - lowT)) * (box.x[1] - box.x[0]);
+      const sy = (value) => box.y[1] - (value / maxHours) * (box.y[1] - box.y[0]);
+      top = `${maxHours.toFixed(0)} h`;
+      mid = `${(maxHours / 2).toFixed(0)} h`;
+      from = `${number(lowT, 0)} °C`;
+      to = `${number(highT, 0)} °C`;
+      const fit = measured === null || measured === undefined ? "" : (() => {
+        const used = days.filter((day) => day.hours > 0);
+        const count = used.length;
+        const meanX = used.reduce((total, day) => total + (day.temp ?? day.outdoor), 0) / count;
+        const meanY = used.reduce((total, day) => total + day.hours, 0) / count;
+        const covariance = used.reduce((total, day) =>
+          total + ((day.temp ?? day.outdoor) - meanX) * (day.hours - meanY), 0);
+        const variance = used.reduce((total, day) =>
+          total + ((day.temp ?? day.outdoor) - meanX) ** 2, 0);
+        const slope = variance ? covariance / variance : 0;
+        const at = (value) => Math.max(0, meanY + slope * (value - meanX));
+        return `<line x1="${sx(lowT).toFixed(1)}" y1="${sy(at(lowT)).toFixed(1)}"
+                      x2="${sx(highT).toFixed(1)}" y2="${sy(at(highT)).toFixed(1)}"
+                      stroke="var(--accent-ink)" stroke-width="1.5" stroke-dasharray="6 5"></line>
+                <line x1="${sx(measured).toFixed(1)}" y1="6" x2="${sx(measured).toFixed(1)}" y2="186"
+                      stroke="var(--accent)" stroke-width="1"></line>`;
+      })();
+      plot = `${fit}${days.map((day) =>
+        `<circle cx="${sx(day.temp ?? day.outdoor).toFixed(1)}" cy="${sy(day.hours).toFixed(1)}"
+                 r="4" fill="var(--accent)"></circle>`).join("")}`;
+    }
+
+    return `<div class="section">
+      <h2>Energy signature</h2>
+      <p>One dot per day: hours of heating against that day's mean outdoor temperature.
+      Where the line reaches zero is this house's balance point — the outdoor temperature
+      above which it holds itself, which is what the heating limit of ${number(limit)} °C is
+      meant to be and is currently a figure out of a book.</p>
+      <div class="signature-split">
+        <div class="signature-plot"><div class="holder">
+          <div class="ytick" style="top:2.7%">${top}</div>
+          <div class="ytick" style="top:43.6%">${mid}</div>
+          <div class="ytick" style="top:84.5%">0</div>
+          <svg viewBox="0 0 ${width} ${height}" style="display:block;width:100%;height:auto">
+            <line x1="44" y1="6" x2="44" y2="186" stroke="var(--line)" stroke-width="1"></line>
+            <line x1="44" y1="186" x2="628" y2="186" stroke="var(--line)" stroke-width="1"></line>
+            ${plot}
+          </svg>
+          <div class="xrow"><div>${from}</div><div>mean outdoor temperature</div><div>${to}</div></div>
+        </div></div>
+        <div class="note">${note} Until the fit is stable the limit stays the figure you
+          typed on <a class="link" data-go="#house">House</a>.</div>
+      </div>
+    </div>`;
+  }
+
+  // --- listeners ----------------------------------------------------------
+
+  bind(root) {
+    this.bindChrome(root);
+    root.querySelectorAll("[data-add-room]").forEach((node) =>
+      node.addEventListener("click", () => this.go("#rooms/new")));
+    root.querySelectorAll("[data-history]").forEach((node) =>
+      node.addEventListener("click", () => {
+        this.hiddenSeries = new Set(
+          this.rooms.filter((room) => room.id !== node.dataset.history).map((room) => room.id));
+        this.go("#history");
+      }));
+    root.querySelectorAll("[data-mode]").forEach((node) =>
+      node.addEventListener("change", () => this.setMode(node.dataset.mode, node.value)));
+    root.querySelectorAll("[data-target]").forEach((node) =>
+      node.addEventListener("change", () => this.setTarget(node.dataset.target, node.value)));
+    root.querySelectorAll("[data-span]").forEach((node) =>
+      node.addEventListener("click", () => {
+        this.span = node.dataset.span;
+        this.history = null;
+        this.renderBody();
+        this.loadHistory();
+      }));
+    root.querySelectorAll("[data-series]").forEach((node) =>
+      node.addEventListener("click", () => {
+        const key = node.dataset.series;
+        if (this.hiddenSeries.has(key)) this.hiddenSeries.delete(key);
+        else this.hiddenSeries.add(key);
+        this.renderBody();
+      }));
+    root.querySelectorAll("[data-save-room]").forEach((node) =>
+      node.addEventListener("click", () => this.saveRoom()));
+    root.querySelectorAll("[data-save-house]").forEach((node) =>
+      node.addEventListener("click", () => this.saveHouse()));
+    root.querySelectorAll("[data-revert-house]").forEach((node) =>
+      node.addEventListener("click", () => {
+        this.draftHouse = null;
+        this.renderBody();
+      }));
+    root.querySelectorAll("[data-delete]").forEach((node) =>
+      node.addEventListener("click", () => this.deleteRoom()));
+    root.querySelectorAll("[data-drop-heater]").forEach((node) =>
+      node.addEventListener("click", () => {
+        this.draft = {
+          ...this.draft,
+          heaters: (this.draft.heaters || []).filter((entity) => entity !== node.dataset.dropHeater),
+        };
+        this.renderBody();
+      }));
+    root.querySelectorAll("[data-pick]").forEach((node) =>
+      node.addEventListener("click", () => {
+        this.picking = node.dataset.pick;
+        this.renderBody();
+        this.shadowRoot.querySelector("[data-entity-search]")?.focus();
+      }));
+    root.querySelectorAll("[data-clear]").forEach((node) =>
+      node.addEventListener("click", () => this.chose(node.dataset.clear, null)));
+
+    this.bindPicker(root);
+    this.bindLanes(root);
+
+    root.querySelectorAll("input[name], select[name]").forEach((field) => {
+      field.addEventListener("input", () => this.take(field));
+      field.addEventListener("change", () => this.take(field));
+    });
+  }
+
+  /**
+   * A crosshair and the readings under it.
+   *
+   * The design is a still picture and cannot draw a pointer; a chart you
+   * cannot interrogate is one you look at once.
+   */
+  bindLanes(root) {
+    const window = this.plotWindow;
+    if (!window) return;
+    root.querySelectorAll("[data-lane]").forEach((svg, laneIndex) => {
+      const series = (this.plots || [])[laneIndex] || [];
+      const line = svg.querySelector("[data-crosshair]");
+      const readout = svg.parentElement.querySelector("[data-readout]");
+      const height = Number(svg.dataset.height);
+      const low = Number(svg.dataset.low);
+      const high = Number(svg.dataset.high);
+
+      const hide = () => {
+        line?.setAttribute("hidden", "");
+        readout?.setAttribute("hidden", "");
+      };
+
+      const show = (event) => {
+        const box = svg.getBoundingClientRect();
+        const fraction = (event.clientX - box.left) / box.width;
+        const index = Math.round(fraction * (window.count - 1));
+        if (!Number.isFinite(index) || index < 0 || index >= window.count) return hide();
+        const at = (index / Math.max(1, window.count - 1)) * 1000;
+        line?.setAttribute("x1", at.toFixed(1));
+        line?.setAttribute("x2", at.toFixed(1));
+        line?.removeAttribute("hidden");
+
+        const moment = window.start + ((window.end - window.start) * index) / Math.max(1, window.count - 1);
+        const rows = series
+          .map((one) => ({ one, value: one.points[index] }))
+          .filter((row) => row.value !== null && row.value !== undefined);
+        readout.innerHTML = `<p class="when">${momentLabel(moment)}</p>
+          ${rows.length ? rows.map((row) =>
+            `<p><span class="swatch" style="background:${row.one.colour}"></span>
+               ${escapeHtml(row.one.label)}<strong>${number(row.value)} °C</strong></p>`).join("")
+            : `<p class="muted">Nothing recorded here.</p>`}`;
+        // Inside the plot: a readout that follows the pointer off the right
+        // edge widens the page.
+        const side = fraction > 0.5 ? "left" : "right";
+        readout.dataset.side = side;
+        readout.style.left = side === "right" ? `${(fraction * 100).toFixed(2)}%` : "auto";
+        readout.style.right = side === "left" ? `${(100 - fraction * 100).toFixed(2)}%` : "auto";
+        readout.removeAttribute("hidden");
+      };
+
+      svg.addEventListener("pointermove", show);
+      svg.addEventListener("pointerdown", show);
+      svg.addEventListener("pointerleave", hide);
+    });
+  }
+
+  bindPicker(root) {
+    const picker = root.querySelector("[data-picker]");
+    if (!picker) return;
+    const name = picker.dataset.picker;
+    const search = picker.querySelector("[data-entity-search]");
+    const results = picker.querySelectorAll("[data-entity-option]");
+    search?.addEventListener("input", () => {
+      const query = search.value.trim().toLowerCase();
+      let shown = 0;
+      results.forEach((option) => {
+        // Capped: a house has thousands of entities, and a list that long is
+        // slower to draw than it is to scroll.
+        const visible = (!query || option.dataset.entityTerms.includes(query)) && shown < 60;
+        option.toggleAttribute("hidden", !visible);
+        if (visible) shown += 1;
+      });
+    });
+    search?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        this.picking = null;
+        this.renderBody();
+      }
+    });
+    results.forEach((option) =>
+      option.addEventListener("click", () => this.chose(name, option.dataset.entityOption)));
   }
 }
 

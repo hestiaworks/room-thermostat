@@ -102,9 +102,10 @@ def test_a_card_joins_its_room_by_id_rather_than_by_name(source: str):
 
 
 def test_a_card_says_why_a_room_is_idle(source: str):
-    """"idle" alone is what made the season lockout look like a fault."""
-    assert "out of heating season" in source
-    assert "out of cooling season" in source
+    """"Idle" alone is what made the season lockout look like a fault."""
+    assert "Idle — heating is out of season" in source
+    assert "Idle — cooling is out of season" in source
+    assert "frost protection still holds at" in source
 
 
 def test_mode_and_setpoint_are_commands_rather_than_settings(source: str):
@@ -135,7 +136,7 @@ def test_typing_does_not_redraw_the_form(source: str):
 
 
 def test_a_refused_save_shows_the_problem_beside_the_field(source: str):
-    assert "this.problems[name]" in source
+    assert "this.problems.temperature_sensor" in source
     assert "PROBLEMS[problem]" in source
 
 
@@ -187,21 +188,21 @@ def test_the_house_says_when_it_has_nothing_to_hold_back(source: str):
 def test_the_hysteresis_is_drawn_as_a_band(source: str):
     """A line cannot show an average that entered the band and did not leave
     it, which is the whole behaviour the band exists to explain."""
-    assert "hysteresis-band" in source
-    assert 'y="${y(limit + hysteresis)' in source
+    assert "LANE.band" in source
+    assert "y(model.limit + model.hysteresis)" in source
 
 
 def test_a_gap_in_a_series_breaks_the_line(source: str):
     """A sensor that was offline did not read zero. Joining across the gap
     draws a plunge that never happened."""
-    path = source[source.index("  path(points, x, y) {") : source.index("timelineSeries(")]
-    assert "value === null" in path
-    assert "open = false" in path
+    lane = source[source.index("laneOne(model) {") : source.index("laneTwo(model) {")]
+    assert "value === null" in lane
+    assert "open = false" in lane
 
 
 def test_the_time_axis_is_labelled_at_both_ends(source: str):
-    assert "when(data.start" in source
-    assert "when(data.end" in source
+    assert "when(model.data.start" in source
+    assert "when(model.data.end" in source
 
 
 def test_a_span_with_nothing_recorded_says_so(source: str):
@@ -215,25 +216,28 @@ def test_the_signature_says_what_it_needs_before_it_can_speak(source: str):
     """Weeks of heating weather. An empty chart with no explanation reads as
     broken."""
     assert "before it can say anything" in source
-    assert "day${days.length === 1" in source
+    assert "not enough heating weather to fit a line" in source
 
 
 def test_the_measured_balance_point_is_shown_against_the_setting(source: str):
     """The number on its own is trivia; beside the limit it is a decision."""
     assert "balance_point" in source
     assert "heat_limit" in source
-    assert "Measured balance point" in source
+    assert "the balance point lands at" in source
+    assert "against your limit of" in source
 
 
-def test_the_verdict_says_which_way_the_limit_is_wrong(source: str):
-    assert "heating runs on days it need not" in source
-    assert "held back on days it would use it" in source
+def test_the_what_if_table_says_which_way_each_limit_moves_things(source: str):
+    """A row of numbers is trivia; the sentence beside it is the decision."""
+    assert "warmer, and the equipment runs more" in source
+    assert "colder, and it runs less" in source
+    assert "what you have now" in source
 
 
 def test_only_days_that_used_heat_are_fitted(source: str):
     """Summer days sit flat on zero and would bend a line that is only
     meaningful where heating ran."""
-    fit = source[source.index("hoursAt(days, outdoor)") : source.index("signature(data)")]
+    fit = source[source.index("signature(model) {") :]
     assert "day.hours > 0" in fit
 
 
@@ -253,32 +257,73 @@ def test_every_select_carries_the_wrapper_that_draws_its_arrow(source: str):
 def test_the_editor_hides_the_tab_bar(source: str):
     """A room's settings is somewhere you went into. Tabs say you are still
     choosing between three peers."""
-    assert 'this.editing ? "" : `<nav class="tabs">' in source
+    assert "tabs.hidden = Boolean(this.editing)" in source
 
 
 def test_an_entity_is_chosen_by_searching_rather_than_typed(source: str):
     """Typing an entity id from memory is how you get a room pointed at
     something that does not exist."""
-    assert "entityPicker(" in source
+    assert "chooser(" in source
     assert "data-entity-search" in source
-    assert 'this.entityPicker("temperature_sensor"' in source
+    assert 'this.chooser("temperature_sensor"' in source
 
 
-def test_typing_in_a_picker_clears_the_chosen_entity(source: str):
-    """A half-typed search must never be saved as though it were an id."""
-    picker = source[source.index("bindPickers(root)") : source.index("takePicker(hidden)")]
-    assert 'hidden.value = ""' in picker
+def test_a_picker_only_ever_yields_an_entity_somebody_chose(source: str):
+    """The search box is not a field: nothing is written to the draft until a
+    result is clicked, so a half-typed search can never be saved as an id."""
+    picker = source[source.index("bindPicker(root) {") : source.index("customElements.get")]
+    assert "this.chose(name, option.dataset.entityOption)" in picker
+    assert "this.take(" not in picker
 
 
-def test_the_timeline_answers_a_pointer(source: str):
-    """A chart you cannot interrogate is a picture. The numbers are the
-    reason to open it."""
+def test_the_lanes_answer_a_pointer(source: str):
+    """A chart you cannot interrogate is a picture, and a still design cannot
+    draw a pointer. The numbers are the reason to open it."""
     assert "pointermove" in source
     assert "data-crosshair" in source
     assert "data-readout" in source
+    assert "bindLanes(root)" in source
 
 
 def test_the_page_uses_the_width_it_is_given(source: str):
     """1180px came from the panel manager, whose workspace was three narrow
     columns. This page is cards and charts."""
     assert "max-width:var(--content-max)" not in source
+
+
+# --- what the design asked for -------------------------------------------
+
+
+def test_the_chrome_is_drawn_once_and_only_the_body_is_replaced(source: str):
+    """Replacing the whole page — bar, tabs and all — with "Reading the
+    record…" is what made every navigation flash."""
+    assert "renderShell()" in source
+    assert "[data-body]" in source
+    assert "renderBody()" in source
+
+
+def test_a_reading_does_not_redraw_the_page(source: str):
+    """A state arrives every few seconds. Redrawing for each one closed
+    pickers mid-search and threw away the scroll position."""
+    setter = source[source.index("set hass(value) {") : source.index("set narrow(")]
+    assert "refreshLive()" in setter
+    assert "renderBody()" not in setter
+    refresh = source[source.index("refreshLive() {") : source.index("async setMode(")]
+    assert "innerHTML" not in refresh.split("icon.innerHTML")[0].replace("icon.innerHTML", "")
+
+
+def test_a_field_being_typed_in_is_left_alone_by_a_refresh(source: str):
+    refresh = source[source.index("refreshLive() {") : source.index("async setMode(")]
+    assert "root.activeElement" in refresh
+
+
+def test_a_room_that_is_off_is_not_counted_as_held_back(source: str):
+    """Off is a choice. Counting it as what the season rule cost would paint
+    the whole lane red on a house with the heating away."""
+    assert "asking &&" in source
+    assert '["heat", "heat_cool"].includes' in source
+
+
+def test_the_what_if_table_replays_the_window_against_other_limits(source: str):
+    assert "whatIf(model)" in source
+    assert "dwell ignored" in source
