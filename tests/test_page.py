@@ -422,3 +422,33 @@ def test_the_season_is_the_first_run_strip(source: str):
 def test_the_strip_caption_says_what_a_block_is_worth(source: str):
     assert "One block =" in source
     assert "Nothing ran — the season held everything idle." in source
+
+
+# --- on a phone ----------------------------------------------------------
+
+
+def test_every_table_value_carries_its_heading(source: str):
+    """Five columns on a phone is five columns of orphaned numbers: the
+    headings are hidden, so each value has to bring its own."""
+    for label in ("In season", "Would run", "Cold hours", "Ran", "Coldest",
+                  "Warmest", "Swing", "Off target"):
+        assert f'data-label="{label}"' in source
+    assert '.grid-table .td[data-label]::before { content:attr(data-label);' in source
+
+
+def test_a_record_starts_with_a_key_the_phone_can_read_as_a_heading(source: str):
+    assert 'class="td mono key"' in source
+    assert 'class="td key"' in source
+    assert ".grid-table .td.key { border-top:1px solid var(--line);" in source
+
+
+def test_the_tables_verdict_cell_is_not_the_accent_box(source: str):
+    """`.note` is the accent-wash panel elsewhere; a cell wearing that class
+    took its background."""
+    assert 'class="td quiet verdict"' in source
+    assert 'class="td quiet note"' not in source
+
+
+def test_the_signature_ticks_step_aside_on_a_phone(source: str):
+    """Its gutter is a few percent of 640, which is not room for "13 h"."""
+    assert ".signature-plot .ytick { display:none; }" in source

@@ -607,10 +607,27 @@ line.crosshair { stroke:var(--ink); stroke-width:1; opacity:.55; }
   .lane .gutter { display:none; }
   .lane-key, .axis-row { padding-left:20px; }
   .strip .naming { flex:0 0 96px; }
+  /* A table of five columns on a phone is five columns of orphaned numbers.
+     Each record becomes a block, and every value carries the heading it lost
+     back beside it. */
   .what-if, .rooms-table { grid-template-columns:minmax(0,1fr); }
   .grid-table .th { display:none; }
-  .grid-table .td { border-top:0; }
-  .grid-table .td:first-child { border-top:1px solid var(--line); }
+  .grid-table .td { border-top:0; padding:6px 16px; display:flex;
+    align-items:baseline; justify-content:space-between; gap:12px; text-align:left; }
+  .grid-table .td[data-label]::before { content:attr(data-label); color:var(--muted);
+    font:400 13px/1.4 var(--font); }
+  .grid-table .td.key { border-top:1px solid var(--line); padding-top:14px;
+    font:600 15px/1.3 var(--font); color:var(--ink); }
+  .grid-table .td.verdict { padding-bottom:14px; }
+  .grid-table .td.num { justify-content:space-between; }
+
+  /* The signature's gutter is a few percent of 640; on a phone that is not
+     enough room for "13 h" and the label lands on the chart. */
+  .signature-plot .ytick { display:none; }
+  .signature-plot .xrow { padding-left:0; padding-right:0; }
+
+  /* A primary button the width of the page is a banner. */
+  .page-head .primary { align-self:flex-start; }
   input, select { font-size:16px; }
 }
 
@@ -1980,11 +1997,11 @@ class RoomThermostatPage extends HTMLElement {
           <div class="th">Heating limit</div><div class="th num">In season</div>
           <div class="th num">Would run</div><div class="th num">Cold hours</div><div class="th"></div>
           ${this.whatIf(model).map((row) => `
-            <div class="td mono" style="${row.current ? "color:var(--accent-ink)" : ""}">${number(row.limit)} °C</div>
-            <div class="td num">${row.inSeason}</div>
-            <div class="td num">${row.run}</div>
-            <div class="td num">${row.cold}</div>
-            <div class="td quiet">${row.note}</div>`).join("")}
+            <div class="td mono key" style="${row.current ? "color:var(--accent-ink)" : ""}">${number(row.limit)} °C</div>
+            <div class="td num" data-label="In season">${row.inSeason}</div>
+            <div class="td num" data-label="Would run">${row.run}</div>
+            <div class="td num" data-label="Cold hours">${row.cold}</div>
+            <div class="td quiet verdict">${row.note}</div>`).join("")}
         </div>
         <p class="after">Computed from this window only. A limit is a property of the house,
         not of a week — check it again over 30 and 90 days before you move it on
@@ -1998,12 +2015,12 @@ class RoomThermostatPage extends HTMLElement {
           <div class="th">Room</div><div class="th num">Ran</div><div class="th num">Coldest</div>
           <div class="th num">Warmest</div><div class="th num">Swing</div><div class="th num">Off target</div>
           ${model.rooms.map((room) => `
-            <div class="td">${escapeHtml(room.name)}</div>
-            <div class="td num">${room.ranHours.toFixed(1)} h</div>
-            <div class="td num">${number(room.low)}</div>
-            <div class="td num">${number(room.high)}</div>
-            <div class="td num">${room.low === null ? "—" : number(room.high - room.low)}</div>
-            <div class="td num quiet">${room.leftHours.toFixed(1)} h</div>`).join("")}
+            <div class="td key">${escapeHtml(room.name)}</div>
+            <div class="td num" data-label="Ran">${room.ranHours.toFixed(1)} h</div>
+            <div class="td num" data-label="Coldest">${number(room.low)}</div>
+            <div class="td num" data-label="Warmest">${number(room.high)}</div>
+            <div class="td num" data-label="Swing">${room.low === null ? "—" : number(room.high - room.low)}</div>
+            <div class="td num quiet" data-label="Off target">${room.leftHours.toFixed(1)} h</div>`).join("")}
         </div>
         <p class="after">Swing is warmest minus coldest — a wide swing is a room the sensor
         and the equipment disagree about.</p>
