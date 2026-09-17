@@ -339,9 +339,16 @@ select { appearance:none; padding-right:30px; background-image:linear-gradient(t
 
 /* The phone's status bar is drawn over the top of the page in the Home
    Assistant app, so the bar begins below it rather than under it. The inset
-   is zero everywhere else, which leaves this exactly as it was. */
-.app-bar { min-height:var(--app-bar); display:flex; align-items:center; gap:var(--s3);
-  padding:env(safe-area-inset-top, 0px) var(--page-inset) 0; border-bottom:1px solid var(--line); }
+   is zero everywhere else, which leaves this exactly as it was on a desk.
+ 
+   The inset is *added* to the bar's height rather than left to eat it.
+   Sizing is border-box, so a min-height of 56 counts the padding: on a
+   notched phone the content box collapsed to a few pixels and the save
+   buttons hung straight through the bottom border. */
+.app-bar { min-height:calc(var(--app-bar) + env(safe-area-inset-top, 0px));
+  display:flex; align-items:center; gap:var(--s3);
+  padding:env(safe-area-inset-top, 0px) var(--page-inset) 0;
+  border-bottom:1px solid var(--line); }
 .app-bar .mark { width:8px; height:8px; background:var(--accent); flex:none; }
 .app-bar .spacer, .save-bar .spacer { flex:1; }
 

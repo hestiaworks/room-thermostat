@@ -102,4 +102,4 @@ PAGE_COMPONENT = "room-thermostat-page"
 PAGE_URL_PATH = "room-thermostat"
 # Keep the query string in step with the manifest version: a browser serves
 # the cached page until it changes, so a drift ships code nobody loads.
-PAGE_MODULE_URL = "/room_thermostat/frontend/room-thermostat-page.js?v=0.16.4"
+PAGE_MODULE_URL = "/room_thermostat/frontend/room-thermostat-page.js?v=0.16.5"

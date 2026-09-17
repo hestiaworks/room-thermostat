@@ -452,3 +452,12 @@ def test_the_tables_verdict_cell_is_not_the_accent_box(source: str):
 def test_the_signature_ticks_step_aside_on_a_phone(source: str):
     """Its gutter is a few percent of 640, which is not room for "13 h"."""
     assert ".signature-plot .ytick { display:none; }" in source
+
+
+def test_the_status_bar_inset_adds_to_the_app_bar_rather_than_eating_it(source: str):
+    """Sizing is border-box, so a min-height of 56 counts the padding. With
+    the inset left inside it, a notched phone collapsed the content box to a
+    few pixels and the save buttons hung through the bottom border."""
+    bar = source[source.index(".app-bar {") : source.index(".app-bar .mark")]
+    assert "min-height:calc(var(--app-bar) + env(safe-area-inset-top, 0px))" in bar
+    assert "padding:env(safe-area-inset-top, 0px)" in bar
