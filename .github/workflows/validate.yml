@@ -22,6 +22,11 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # The brands check wants the domain in home-assistant/brands, which
+          # is for integrations shipped with Home Assistant. This one is
+          # installed from here and never will be, so the check can only ever
+          # fail — and a workflow that always fails is one nobody reads.
+          ignore: brands
 
   tests:
     runs-on: ubuntu-latest
