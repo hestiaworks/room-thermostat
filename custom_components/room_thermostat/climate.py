@@ -22,7 +22,10 @@ from homeassistant.const import ATTR_ENTITY_ID, UnitOfTemperature
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
+    async_dispatcher_send,
+)
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_call_later,
@@ -32,8 +35,9 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from . import control
-from .config_flow import sources
+from . import control, seasons
+from .model import Room
+from .store import RoomStore
 from .const import (
     CONF_ALLOW_AC_HEAT,
     CONF_COOL_COLD_TOLERANCE,
@@ -61,6 +65,8 @@ from .const import (
     DEFAULT_WARM_ON,
     DOMAIN,
     SIGNAL_DEMAND,
+    SIGNAL_ROOM,
+    SIGNAL_ROOMS,
 )
 
 # The loops are driven by source changes, but minimum on and off times expire
@@ -98,7 +104,28 @@ ACTIONS = {
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    async_add_entities([RoomThermostat(hass, entry)])
+    """Build a thermostat per room, and keep up as the record changes.
+
+    Config entries used to do this, one room each. The record is ours now, so
+    adding and taking away is ours too.
+    """
+    store: RoomStore = hass.data[DOMAIN]["store"]
+    known: dict[str, RoomThermostat] = {}
+
+    @callback
+    def _sync() -> None:
+        wanted = {room.id for room in store.rooms}
+        added = [RoomThermostat(hass, room_id) for room_id in wanted - known.keys()]
+        for entity in added:
+            known[entity.unique_id] = entity
+        if added:
+            async_add_entities(added)
+        for room_id in list(known.keys() - wanted):
+            entity = known.pop(room_id)
+            hass.async_create_task(entity.async_remove(force_remove=True))
+
+    _sync()
+    entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_ROOMS, _sync))
 
 
 def _number(hass: HomeAssistant, entity_id: str | None) -> float | None:
@@ -122,18 +149,20 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
     # name and nothing else.
     _attr_has_entity_name = False
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    # Push, not poll: the loop runs on its sources changing and on its own
+    # tick. Home Assistant's polling would be a third caller with nothing to
+    # add, and it outlives an entity that has been removed.
+    _attr_should_poll = False
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(self, hass: HomeAssistant, room_id: str) -> None:
         self.hass = hass
-        self._entry = entry
-        self._attr_unique_id = entry.entry_id
-        self._attr_name = entry.title
-        chosen = sources(entry)
-        self._sensor = chosen.get(CONF_TEMPERATURE_SENSOR)
-        self._humidity = chosen.get(CONF_HUMIDITY_SENSOR)
-        self._cooler = chosen.get(CONF_COOLER)
-        self._heaters: list[str] = list(chosen.get(CONF_HEATERS) or [])
-        self._inverted = set(entry.options.get(CONF_INVERTED_HEATERS) or [])
+        self._room_id = room_id
+        room = hass.data[DOMAIN]["store"].room(room_id)
+        # The id is the room's, which for a room that predates the record is
+        # the id its config entry had. Nothing a dashboard points at moves.
+        self._attr_unique_id = room_id
+        self._attr_name = room.name
+        self._watching: Callable[[], None] | None = None
         self._mode = HVACMode.OFF
         self._target = 21.0
         self._target_low = 20.0
@@ -151,21 +180,46 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         # A device per room, so its thermostat and its demand sensor group
         # together and both take the room's name.
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
+            identifiers={(DOMAIN, room_id)},
+            name=room.name,
             manufacturer="Room Thermostat",
         )
 
     # --- what this room can do -------------------------------------------
 
     @property
-    def _options(self) -> dict[str, Any]:
-        return self._entry.options
+    def _room(self) -> Room:
+        """Read rather than held.
+
+        An edited tolerance takes effect on the next loop with nothing rebuilt,
+        because there is no copy of it here to go stale.
+        """
+        return self.hass.data[DOMAIN]["store"].room(self._room_id)
+
+    @property
+    def _sensor(self) -> str | None:
+        return self._room.temperature_sensor
+
+    @property
+    def _humidity(self) -> str | None:
+        return self._room.humidity_sensor
+
+    @property
+    def _cooler(self) -> str | None:
+        return self._room.cooler
+
+    @property
+    def _heaters(self) -> list[str]:
+        return list(self._room.heaters)
+
+    @property
+    def _inverted(self) -> set[str]:
+        return set(self._room.inverted_heaters)
 
     @property
     def hvac_modes(self) -> list[HVACMode]:
         modes = [HVACMode.OFF]
-        if self._heaters or (self._cooler and self._options[CONF_ALLOW_AC_HEAT]):
+        if self._heaters or (self._cooler and self._room.allow_ac_heat):
             modes.append(HVACMode.HEAT)
         if self._cooler:
             modes += [HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY]
@@ -199,7 +253,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         Absent means show everything the unit reports, which is what a room
         configured before this existed expects.
         """
-        chosen = self._options.get(CONF_VISIBLE_CONTROLS)
+        chosen = self._room.visible_controls
         return control in chosen if chosen is not None else True
 
     def _cooler_attribute(self, name: str) -> Any:
@@ -252,6 +306,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
             for entity in (self._sensor, self._humidity, self._cooler, *self._heaters)
             if entity
         ]
+        heating_season, cooling_season = seasons.allowed(self.hass)
         missing = [
             entity
             for entity in watched
@@ -264,9 +319,15 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
             "cooler": self._cooler,
             "heaters": self._heaters,
             "inverted_heaters": sorted(self._inverted),
+            # The page joins a card to its room by this rather than by name.
+            "room_id": self._room_id,
             "heat_demand": self._demand,
             "frost_protection": self._frost,
             "unavailable_devices": missing,
+            # Why a room set to heat is sitting idle, without a trip to the
+            # Seasons device to find out.
+            "heating_season": heating_season,
+            "cooling_season": cooling_season,
         }
 
     @property
@@ -356,27 +417,33 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
     # --- the loop ---------------------------------------------------------
 
     def _config(self) -> control.RoomConfig:
-        options = self._options
+        room = self._room
+        heating_allowed, cooling_allowed = seasons.allowed(self.hass)
+        heat_override, cool_override = seasons.overrides(self.hass)
         return control.RoomConfig(
             has_cooler=bool(self._cooler),
             has_heater=bool(self._heaters),
-            cooling_strategy=options[CONF_COOLING_STRATEGY],
-            offset_correction=options[CONF_OFFSET_CORRECTION],
-            parked_setpoint=options[CONF_PARKED_SETPOINT],
-            cool_cold_tolerance=options[CONF_COOL_COLD_TOLERANCE],
-            cool_hot_tolerance=options[CONF_COOL_HOT_TOLERANCE],
-            cool_min_on=options[CONF_COOL_MIN_ON],
-            cool_min_off=options[CONF_COOL_MIN_OFF],
-            heat_cold_tolerance=options[CONF_HEAT_COLD_TOLERANCE],
-            heat_hot_tolerance=options[CONF_HEAT_HOT_TOLERANCE],
-            heat_min_on=options[CONF_HEAT_MIN_ON],
-            heat_min_off=options[CONF_HEAT_MIN_OFF],
-            valve_travel=options[CONF_VALVE_TRAVEL],
-            allow_ac_heat=options[CONF_ALLOW_AC_HEAT],
-            frost_temperature=options[CONF_FROST_TEMPERATURE],
+            cooling_strategy=room.cooling_strategy,
+            offset_correction=room.offset_correction,
+            parked_setpoint=room.parked_setpoint,
+            cool_cold_tolerance=room.cool_cold_tolerance,
+            cool_hot_tolerance=room.cool_hot_tolerance,
+            cool_min_on=room.cool_min_on,
+            cool_min_off=room.cool_min_off,
+            heat_cold_tolerance=room.heat_cold_tolerance,
+            heat_hot_tolerance=room.heat_hot_tolerance,
+            heat_min_on=room.heat_min_on,
+            heat_min_off=room.heat_min_off,
+            valve_travel=room.valve_travel,
+            allow_ac_heat=room.allow_ac_heat,
+            frost_temperature=room.frost_temperature,
             frost_recovery=DEFAULT_FROST_RECOVERY,
             warm_on=DEFAULT_WARM_ON,
             warm_off=DEFAULT_WARM_OFF,
+            heating_allowed=heating_allowed,
+            cooling_allowed=cooling_allowed,
+            heat_override=heat_override,
+            cool_override=cool_override,
         )
 
     async def _apply(self) -> None:
@@ -410,9 +477,11 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
 
         if decision.heat_demand != self._demand:
             self._demand = decision.heat_demand
-            self.hass.data[DOMAIN][self._entry.entry_id]["demand"] = self._demand
+            self.hass.data[DOMAIN].setdefault(self._room_id, {})["demand"] = (
+                self._demand
+            )
             async_dispatcher_send(
-                self.hass, SIGNAL_DEMAND, self._entry.entry_id, self._demand
+                self.hass, SIGNAL_DEMAND, self._room_id, self._demand
             )
 
         self.async_write_ha_state()
@@ -503,9 +572,55 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         self._retry = None
         self.hass.async_create_task(self._apply())
 
+    @callback
+    def _unwatch(self) -> None:
+        if self._watching is not None:
+            self._watching()
+            self._watching = None
+
+    @callback
+    def _resubscribe(self) -> None:
+        """Watch whatever this room currently reads.
+
+        Called again when the room is edited, because a room given a different
+        sensor must stop listening to the old one — and a room that kept
+        listening to it would look like one ignoring the change.
+        """
+        self._unwatch()
+        watched = [
+            entity
+            for entity in (
+                self._sensor,
+                self._humidity,
+                self._cooler,
+                # A season flipping is acted on at once rather than at the next
+                # tick, like any other input this room reads.
+                *seasons.season_entity_ids(self.hass),
+            )
+            if entity
+        ]
+        if not watched:
+            return
+
+        @callback
+        def _changed(_: Event) -> None:
+            self.hass.async_create_task(self._apply())
+
+        self._watching = async_track_state_change_event(self.hass, watched, _changed)
+
+    @callback
+    def _room_changed(self, room_id: str) -> None:
+        """A room that has been edited may watch different entities, and may
+        have been renamed."""
+        if room_id != self._room_id:
+            return
+        self._attr_name = self._room.name
+        self._resubscribe()
+        self.hass.async_create_task(self._apply())
+
     def _report_sensor(self, lost: bool) -> None:
         """A heating system that fails silent in winter is not acceptable."""
-        issue = f"sensor_lost_{self._entry.entry_id}"
+        issue = f"sensor_lost_{self._room_id}"
         if lost:
             ir.async_create_issue(
                 self.hass,
@@ -515,7 +630,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
                 severity=ir.IssueSeverity.WARNING,
                 translation_key="sensor_lost",
                 translation_placeholders={
-                    "room": self._entry.title,
+                    "room": self._room.name,
                     "sensor": self._sensor or "",
                 },
             )
@@ -529,20 +644,11 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
                 self._mode = HVACMode(last.state)
             self._target = last.attributes.get("temperature") or self._target
 
-        sources = [
-            entity
-            for entity in (self._sensor, self._humidity, self._cooler)
-            if entity
-        ]
-
-        @callback
-        def _changed(_: Event) -> None:
-            self.hass.async_create_task(self._apply())
-
-        if sources:
-            self.async_on_remove(
-                async_track_state_change_event(self.hass, sources, _changed)
-            )
+        self._resubscribe()
+        self.async_on_remove(lambda: self._unwatch())
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, SIGNAL_ROOM, self._room_changed)
+        )
         self.async_on_remove(
             async_track_time_interval(self.hass, self._wake, TICK)
         )

@@ -31,7 +31,8 @@
       "own_entity": "That is one of this integration's own thermostats — a room cannot drive itself. Choose the air conditioner's own entity."
     },
     "abort": {
-      "reconfigure_successful": "The room's devices were updated."
+      "reconfigure_successful": "The room's devices were updated.",
+      "single_instance_allowed": "The heating and cooling seasons are decided once for the house, and that entry already exists."
     }
   },
   "options": {
@@ -122,6 +123,10 @@
     "sensor_lost": {
       "title": "{room} has lost its temperature sensor",
       "description": "{sensor} is unavailable, so {room} cannot be controlled against a reading. It has fallen back to warming through periodically so it cannot freeze, but it is no longer holding a temperature. Restore the sensor, or reconfigure the room to use a different one."
+    },
+    "outdoor_lost": {
+      "title": "The outdoor temperature source has gone",
+      "description": "{sensor} has been unavailable for over an hour, so the heating and cooling seasons cannot be decided from it. Both are reported as in season, which means nothing is being held back — rooms are behaving as they did before seasons were configured. Restore the source, or choose a different one in the Seasons settings."
     }
   },
   "selector": {

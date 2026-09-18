@@ -26,6 +26,77 @@ ACTION_FAN = "fan"
 MAX_OFFSET = 3.0
 
 
+def damp(previous: float | None, reading: float, elapsed: float, tau: float) -> float:
+    """An exponential moving average of the outdoor temperature.
+
+    The step is elapsed time over a time constant, so a source that reports
+    every five minutes and one that reports every thirty seconds converge on
+    the same curve, and a restart after an hour's gap is not a special case.
+
+    `tau` stands for the building's thermal mass — the same setting other
+    controllers offer as "building type: light, medium, heavy" — and is what
+    makes the decision take days rather than hours.
+
+    With no history there is nothing to average, so the first reading becomes
+    the average. The step is clamped to 1: Home Assistant can be off for a
+    week, and a step above one would fly past the reading and oscillate.
+    """
+    if previous is None or tau <= 0:
+        return reading
+    step = min(max(elapsed, 0.0) / tau, 1.0)
+    return previous + (reading - previous) * step
+
+
+def in_season(
+    currently: bool, value: float, limit: float, hysteresis: float, rising: bool
+) -> bool:
+    """Whether a season is on, entered on one edge and left on the other.
+
+    The same idiom as `_wants_heat`: the answer depends on the answer, so a
+    value sitting on the threshold cannot toggle day after day.
+
+    `rising` says which way the season is entered. Heating is entered as the
+    outdoor temperature falls; cooling as it rises.
+    """
+    if rising:
+        return value > limit - hysteresis if currently else value > limit
+    return value < limit + hysteresis if currently else value < limit
+
+
+def settled(
+    currently: bool,
+    candidate: bool,
+    pending_since: float | None,
+    now: float,
+    dwell: float,
+) -> tuple[bool, float | None]:
+    """Hold an answer until the thing disagreeing with it has lasted.
+
+    Hysteresis stops a value chattering across a threshold; it does nothing
+    about a threshold the value crosses properly twice a day. A mild autumn
+    whose daily mean sits a degree above the heating limit dips below it for a
+    few hours every night, however hard the average is damped — measured at
+    three hours with a thirty-hour time constant — and the heating would come
+    on before dawn and go away by mid-morning.
+
+    So a change has to last. This is also the only honest way to say "cold
+    weather must go on for a while before the heater is allowed": crossing a
+    limit that sits close to where the average already is takes hours, not the
+    days a time constant suggests, so the wait has to be a number somebody set
+    rather than a side effect of a filter.
+
+    Returns the answer to publish and what to remember: the moment the
+    disagreement started, or None when there is nothing pending.
+    """
+    if candidate == currently:
+        return currently, None
+    if pending_since is None:
+        return (candidate, None) if dwell <= 0 else (currently, now)
+    if now - pending_since >= dwell:
+        return candidate, None
+    return currently, pending_since
+
+
 @dataclass(frozen=True)
 class RoomConfig:
     has_cooler: bool
@@ -47,6 +118,20 @@ class RoomConfig:
     frost_recovery: float
     warm_on: float
     warm_off: float
+    # Whether the house is in each season. False does not mean "never": the
+    # overrides below are the room's own thermometer disagreeing with a guess
+    # about the weather, and the thermometer wins.
+    #
+    # Both default to allowed, so a room built by something that has never
+    # heard of seasons is in both of them. Failing open is the rule everywhere
+    # in this feature, and a default is the cheapest place to enforce it.
+    heating_allowed: bool = True
+    cooling_allowed: bool = True
+    # How far from setpoint a room must be, out of season, before it runs
+    # anyway. Well below the setpoint on purpose: a threshold near it would
+    # fire on the very evenings the lockout exists to suppress.
+    heat_override: float = 4.0
+    cool_override: float = 4.0
 
 
 @dataclass(frozen=True)
@@ -138,6 +223,25 @@ def _wants_cool(
     return room >= target + config.cool_cold_tolerance
 
 
+def _heat_permitted(config: RoomConfig, room: float, target: float) -> bool:
+    """Whether heating may run at all, before asking whether it is wanted.
+
+    Out of season the room's own thermometer can still overrule the weather,
+    and there is deliberately no recovery band on top: a room held at the
+    override floor cycles no faster than heat_min_on and heat_min_off allow,
+    which is what those exist for.
+    """
+    if config.heating_allowed:
+        return True
+    return room <= target - config.heat_override
+
+
+def _cool_permitted(config: RoomConfig, room: float, target: float) -> bool:
+    if config.cooling_allowed:
+        return True
+    return room >= target + config.cool_override
+
+
 def _corrected_target(target: float, readings: Readings, config: RoomConfig) -> float:
     """Aim the unit at the room rather than at its own sensor."""
     if not config.offset_correction or readings.cooler_temperature is None:
@@ -213,7 +317,9 @@ def decide(
 
     elif mode == "heat" and room is not None:
         target = request.target if request.target is not None else 21.0
-        wants = _wants_heat(room, target, state.heaters_on, config)
+        wants = _wants_heat(room, target, state.heaters_on, config) and _heat_permitted(
+            config, room, target
+        )
         if config.has_cooler and config.allow_ac_heat:
             # Either/or: the unit heats this room, so the valves stay shut.
             cooler_on, held = _switch(
@@ -243,15 +349,20 @@ def decide(
 
     elif mode == "cool" and config.has_cooler and room is not None:
         target = request.target if request.target is not None else 24.0
-        cooler_on, cooler, held = _cool(config, readings, target, state, now)
-        holds.append(held)
+        if _cool_permitted(config, room, target):
+            cooler_on, cooler, held = _cool(config, readings, target, state, now)
+            holds.append(held)
 
     elif mode == "heat_cool" and room is not None:
         low = request.target_low if request.target_low is not None else 20.0
         high = request.target_high if request.target_high is not None else 25.0
         # Below the low setpoint we heat, above the high one we cool, and
         # between them neither runs — so the two can never oppose each other.
-        if config.has_heater and _wants_heat(room, low, state.heaters_on, config):
+        if (
+            config.has_heater
+            and _wants_heat(room, low, state.heaters_on, config)
+            and _heat_permitted(config, room, low)
+        ):
             heaters_on, held = _switch(
                 True,
                 state.heaters_on,
@@ -261,7 +372,11 @@ def decide(
                 config.heat_min_off,
             )
             holds.append(held)
-        elif config.has_cooler and _wants_cool(room, high, state.cooler_on, config):
+        elif (
+            config.has_cooler
+            and _wants_cool(room, high, state.cooler_on, config)
+            and _cool_permitted(config, room, high)
+        ):
             cooler_on, cooler, held = _cool(config, readings, high, state, now)
             holds.append(held)
 
@@ -269,7 +384,10 @@ def decide(
     # off when the room can be measured; this stands in for it when the room
     # cannot be, so excluding off would leave the very case it exists for
     # uncovered — a room switched off in January with a dead sensor.
-    if sensor_lost and config.has_heater:
+    # The blind duty cycle is a frost proxy, so it follows the heating season.
+    # With no reading the override cannot rescue it either, which is the honest
+    # consequence of having no thermometer.
+    if sensor_lost and config.has_heater and config.heating_allowed:
         heaters_on = _warm_through(state, now, config)
 
     # Frost protection overrides intent, which is the point of it: a

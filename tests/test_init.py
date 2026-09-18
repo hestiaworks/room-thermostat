@@ -2,43 +2,47 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.room_thermostat import entry_type
 from custom_components.room_thermostat.config_flow import default_options
 from custom_components.room_thermostat.const import (
+    CONF_ENTRY_TYPE,
     CONF_HEATERS,
     CONF_TEMPERATURE_SENSOR,
     DOMAIN,
+    ENTRY_HUB,
+    ENTRY_ROOM,
 )
 
 
-def bedroom(hass: HomeAssistant) -> MockConfigEntry:
+async def bedroom(hass: HomeAssistant) -> MockConfigEntry:
+    """A house with one room in it: the hub entry, and a room in its record."""
     entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Bedroom",
-        data={
-            "name": "Bedroom",
-            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
-            CONF_HEATERS: ["switch.radiator"],
-        },
-        options=default_options(),
+        domain=DOMAIN, title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
     )
     entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await hass.data[DOMAIN]["store"].async_add_room(
+        {
+            "name": "Bedroom",
+            "temperature_sensor": "sensor.bedroom_temperature",
+            "heaters": ["switch.radiator"],
+        }
+    )
+    await hass.async_block_till_done()
     return entry
 
 
 async def test_a_room_loads_both_of_its_entities(hass: HomeAssistant):
     hass.states.async_set("sensor.bedroom_temperature", "22.0")
-    entry = bedroom(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await bedroom(hass)
     assert hass.states.get("climate.bedroom") is not None
     assert hass.states.get("binary_sensor.bedroom_heat_demand") is not None
 
 
 async def test_a_room_unloads_cleanly(hass: HomeAssistant):
     hass.states.async_set("sensor.bedroom_temperature", "22.0")
-    entry = bedroom(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    entry = await bedroom(hass)
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert entry.entry_id not in hass.data.get(DOMAIN, {})
@@ -48,12 +52,93 @@ async def test_a_lost_sensor_asks_a_human_for_help(hass: HomeAssistant):
     """Failing silent is not acceptable for a heating system: the room is now
     on a blind duty cycle and somebody needs to know."""
     hass.states.async_set("sensor.bedroom_temperature", "22.0")
-    entry = bedroom(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await bedroom(hass)
+    room_id = hass.data[DOMAIN]["store"].rooms[0].id
 
     hass.states.async_set("sensor.bedroom_temperature", "unavailable")
     await hass.async_block_till_done()
 
     registry = ir.async_get(hass)
-    assert registry.async_get_issue(DOMAIN, f"sensor_lost_{entry.entry_id}") is not None
+    assert registry.async_get_issue(DOMAIN, f"sensor_lost_{room_id}") is not None
+
+
+def test_an_entry_without_a_type_is_a_room():
+    """Every room that exists today predates the key and must keep working."""
+    entry = MockConfigEntry(domain=DOMAIN, title="Bedroom", data={"name": "Bedroom"})
+    assert entry_type(entry) == ENTRY_ROOM
+
+
+async def test_the_hub_registers_a_page_in_the_sidebar(hass: HomeAssistant):
+    from homeassistant.components import frontend
+
+    from custom_components.room_thermostat.const import ENTRY_HUB, PAGE_URL_PATH
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert PAGE_URL_PATH in hass.data[frontend.DATA_PANELS]
+
+
+async def test_the_hub_loads_the_store(hass: HomeAssistant):
+    from custom_components.room_thermostat.const import ENTRY_HUB
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.data[DOMAIN]["store"].rooms == ()
+
+
+async def test_adding_the_integration_creates_the_hub_and_only_one(
+    hass: HomeAssistant,
+):
+    from custom_components.room_thermostat.const import ENTRY_HUB
+
+    first = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}, data={}
+    )
+    assert first["type"] == "create_entry"
+    assert first["data"][CONF_ENTRY_TYPE] == ENTRY_HUB
+
+    second = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}, data={}
+    )
+    assert second["type"] == "abort"
+    assert second["reason"] == "single_instance_allowed"
+
+
+def test_the_page_module_url_matches_the_manifest_version():
+    """A browser serves the cached page until this query string changes, so a
+    release that forgets it ships code nobody loads."""
+    import json
+    from pathlib import Path
+
+    from custom_components.room_thermostat.const import PAGE_MODULE_URL
+
+    manifest = json.loads(
+        (
+            Path(__file__).parent.parent
+            / "custom_components/room_thermostat/manifest.json"
+        ).read_text()
+    )
+    assert PAGE_MODULE_URL.endswith(f"?v={manifest['version']}")
+
+
+def test_the_page_defines_the_element_home_assistant_will_look_for():
+    """A panel registered from an integration is instantiated as
+    ha-panel-<component_name>. Defining only the bare name gives a sidebar
+    entry that opens on nothing at all, which is exactly what it did."""
+    from pathlib import Path
+
+    from custom_components.room_thermostat.const import PAGE_COMPONENT
+
+    source = (
+        Path(__file__).parent.parent
+        / "custom_components/room_thermostat/frontend/room-thermostat-page.js"
+    ).read_text()
+    assert f'customElements.define("ha-panel-{PAGE_COMPONENT}"' in source

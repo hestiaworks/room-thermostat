@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
+from homeassistant.config_entries import ConfigFlow
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult, section
 from homeassistant.core import HomeAssistant
@@ -17,6 +17,16 @@ from homeassistant.helpers import entity_registry as er, selector
 
 from .const import (
     CONF_ALLOW_AC_HEAT,
+    CONF_COOL_LIMIT,
+    CONF_COOL_LIMIT_HYSTERESIS,
+    CONF_COOL_OVERRIDE,
+    CONF_DAMPING_HOURS,
+    CONF_ENTRY_TYPE,
+    CONF_HEAT_LIMIT,
+    CONF_HEAT_LIMIT_HYSTERESIS,
+    CONF_HEAT_OVERRIDE,
+    CONF_OUTDOOR_SENSOR,
+    CONF_SEASON_DWELL,
     CONF_COOL_COLD_TOLERANCE,
     CONF_COOL_HOT_TOLERANCE,
     CONF_COOL_MIN_OFF,
@@ -37,16 +47,23 @@ from .const import (
     CONF_PARKED_SETPOINT,
     CONF_TEMPERATURE_SENSOR,
     CONF_VALVE_TRAVEL,
+    DEFAULT_COOL_LIMIT,
     DEFAULT_COOL_MIN_OFF,
+    DEFAULT_DAMPING_HOURS,
     DEFAULT_COOL_MIN_ON,
     DEFAULT_COOL_TOLERANCE,
     DEFAULT_FROST_TEMPERATURE,
+    DEFAULT_HEAT_LIMIT,
     DEFAULT_HEAT_MIN_OFF,
     DEFAULT_HEAT_MIN_ON,
     DEFAULT_HEAT_TOLERANCE,
+    DEFAULT_LIMIT_HYSTERESIS,
     DEFAULT_PARKED_SETPOINT,
+    DEFAULT_SEASON_DWELL_HOURS,
+    DEFAULT_SEASON_OVERRIDE,
     DEFAULT_VALVE_TRAVEL,
     DOMAIN,
+    ENTRY_HUB,
     STRATEGY_GATED,
     STRATEGY_PASSTHROUGH,
 )
@@ -330,102 +347,24 @@ class RoomThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            errors = _problems(self.hass, user_input)
-            if not errors:
-                return self.async_create_entry(
-                    title=user_input["name"],
-                    data={"name": user_input["name"]},
-                    options={
-                        **default_options(),
-                        **{k: v for k, v in user_input.items() if k in SOURCE_KEYS},
-                    },
-                )
-        return self.async_show_form(
-            step_id="user", data_schema=ROOM_SCHEMA, errors=errors
-        )
+        """Add the integration. There is one of these, and it is the door.
 
-    async def async_step_reconfigure(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Change which sensors and devices a room uses.
-
-        Deleting and recreating the room would work, and would also take its
-        history, its entity ids and every dashboard card pointing at them. The
-        tunables are left alone: they live in the entry's options and are
-        edited separately.
+        Rooms are not made here any more: they are made on the page, which is
+        the record. This only brings the integration into being, so that the
+        page exists to make them on.
         """
-        entry = self._get_reconfigure_entry()
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            errors = _problems(self.hass, user_input)
-            if not errors:
-                return self.async_update_reload_and_abort(
-                    entry, title=user_input["name"], data=user_input
-                )
-        return self.async_show_form(
-            step_id="reconfigure",
-            data_schema=self.add_suggested_values_to_schema(
-                ROOM_SCHEMA, user_input or entry.data
-            ),
-            errors=errors,
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_HUB:
+                return self.async_abort(reason="single_instance_allowed")
+        return self.async_create_entry(
+            title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
         )
 
-    @staticmethod
-    @callback
-    def async_get_options_flow(entry: ConfigEntry) -> OptionsFlow:
-        return RoomThermostatOptionsFlow()
-
-
-class RoomThermostatOptionsFlow(OptionsFlow):
-    async def async_step_init(
+    async def async_step_import(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: dict[str, str] = {}
-        flat: dict[str, Any] | None = None
-        if user_input is not None:
-            flat = {
-                key: value
-                for group in user_input.values()
-                for key, value in group.items()
-            }
-            # Every source key is written, including the ones left empty, so
-            # clearing a device clears it rather than falling back to what the
-            # room used before.
-            flat.update({key: flat.get(key) for key in SOURCE_KEYS})
-            # The inversion ticks list the room's own heaters, so a tick for a
-            # heater that has just been removed is the removal seen from the
-            # other side, not a mistake to report. It goes with the heater.
-            flat[CONF_INVERTED_HEATERS] = [
-                heater
-                for heater in (flat.get(CONF_INVERTED_HEATERS) or [])
-                if heater in (flat.get(CONF_HEATERS) or [])
-            ]
-            errors = _problems(self.hass, flat)
-            if not errors:
-                return self.async_create_entry(
-                    data={**self.config_entry.options, **flat}
-                )
+        """Make the hub for a house that predates it.
 
-        # A refused form comes back as it was filled in. Redrawing it from the
-        # stored configuration threw the edit away, and the field someone had
-        # just cleared reappeared with its old value — which reads as the form
-        # ignoring them rather than as a refusal.
-        chosen = {key: flat[key] for key in SOURCE_KEYS} if flat else sources(self.config_entry)
-        current = {**default_options(), **self.config_entry.options}
-        suggested = user_input if user_input is not None else {
-            "sensors": {k: v for k, v in chosen.items() if v and "sensor" in k},
-            "devices": {
-                k: v
-                for k, v in chosen.items()
-                if v and k in (CONF_COOLER, CONF_HEATERS, CONF_INVERTED_HEATERS)
-            },
-        }
-        return self.async_show_form(
-            step_id="init",
-            data_schema=self.add_suggested_values_to_schema(
-                room_schema(self.hass, current, chosen), suggested
-            ),
-            errors=errors,
-        )
+        Reachable only from code, when rooms are found with nowhere to live.
+        """
+        return await self.async_step_user()

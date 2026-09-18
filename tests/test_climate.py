@@ -1,24 +1,37 @@
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
 
-from custom_components.room_thermostat.config_flow import default_options
 from custom_components.room_thermostat.const import (
     CONF_COOLER,
+    CONF_ENTRY_TYPE,
     CONF_HEATERS,
     CONF_TEMPERATURE_SENSOR,
     DOMAIN,
+    ENTRY_HUB,
 )
 
 
+async def edit_room(hass: HomeAssistant, changes: dict) -> None:
+    """Change the one room in the record, the way the page will."""
+    store = hass.data[DOMAIN]["store"]
+    await store.async_update_room(store.rooms[0].id, changes)
+    await hass.async_block_till_done()
+
+
 async def add_room(hass: HomeAssistant, **data) -> MockConfigEntry:
+    """A house with one room in the record.
+
+    Rooms are not config entries any more: the hub is the entry, and a room is
+    a line in the record it owns. Everything these tests assert about a room's
+    behaviour is unchanged by that, which is the point.
+    """
     entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Bedroom",
-        data={"name": "Bedroom", **data},
-        options=default_options(),
+        domain=DOMAIN, title="Room Thermostat", data={CONF_ENTRY_TYPE: ENTRY_HUB}
     )
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await hass.data[DOMAIN]["store"].async_add_room({"name": "Bedroom", **data})
     await hass.async_block_till_done()
     return entry
 
@@ -437,10 +450,7 @@ async def test_an_inverted_valve_is_closed_to_let_heat_through(hass: HomeAssista
             CONF_HEATERS: ["valve.radiator_inverted"],
         },
     )
-    hass.config_entries.async_update_entry(
-        entry,
-        options={**entry.options, "inverted_heaters": ["valve.radiator_inverted"]},
-    )
+    await edit_room(hass, {"inverted_heaters": ["valve.radiator_inverted"]})
     await hass.async_block_till_done()
 
     opened = async_mock_service(hass, "valve", "open_valve")
@@ -481,10 +491,7 @@ async def test_a_room_can_mix_inverted_and_normal_valves(hass: HomeAssistant):
             CONF_HEATERS: ["valve.normal", "valve.inverted"],
         },
     )
-    hass.config_entries.async_update_entry(
-        entry, options={**entry.options, "inverted_heaters": ["valve.inverted"]}
-    )
-    await hass.async_block_till_done()
+    await edit_room(hass, {"inverted_heaters": ["valve.inverted"]})
 
     opened = async_mock_service(hass, "valve", "open_valve")
     closed = async_mock_service(hass, "valve", "close_valve")
@@ -518,6 +525,10 @@ async def test_an_inverted_valve_already_in_the_right_place_is_left_alone(
 ):
     hass.states.async_set("sensor.bedroom_temperature", "18.0")
     hass.states.async_set("valve.radiator_inverted", "closed")
+    # Registered before the edit: a room that has been edited runs its loop at
+    # once now, rather than waiting for a config entry to reload around it.
+    opened = async_mock_service(hass, "valve", "open_valve")
+    closed = async_mock_service(hass, "valve", "close_valve")
     entry = await add_room(
         hass,
         **{
@@ -525,14 +536,9 @@ async def test_an_inverted_valve_already_in_the_right_place_is_left_alone(
             CONF_HEATERS: ["valve.radiator_inverted"],
         },
     )
-    hass.config_entries.async_update_entry(
-        entry,
-        options={**entry.options, "inverted_heaters": ["valve.radiator_inverted"]},
-    )
-    await hass.async_block_till_done()
-
-    opened = async_mock_service(hass, "valve", "open_valve")
-    closed = async_mock_service(hass, "valve", "close_valve")
+    await edit_room(hass, {"inverted_heaters": ["valve.radiator_inverted"]})
+    opened.clear()
+    closed.clear()
     await hass.services.async_call(
         "climate",
         "set_temperature",
@@ -578,10 +584,7 @@ async def test_a_change_held_by_a_minimum_time_applies_itself_later(
         },
     )
     # Long enough that the thirty second tick cannot be what rescues it.
-    hass.config_entries.async_update_entry(
-        entry, options={**entry.options, "heat_min_on": 120.0}
-    )
-    await hass.async_block_till_done()
+    await edit_room(hass, {"heat_min_on": 120.0})
 
     async_mock_service(hass, "valve", "open_valve")
     closed = async_mock_service(hass, "valve", "close_valve")
@@ -650,10 +653,7 @@ async def test_controls_can_be_hidden_from_the_thermostat(hass: HomeAssistant):
     assert everything["swing_horizontal_modes"] == ["default", "left"]
     assert everything["preset_modes"] == ["eco", "none"]
 
-    hass.config_entries.async_update_entry(
-        entry,
-        options={**entry.options, "visible_controls": ["fan_mode", "swing_mode"]},
-    )
+    await edit_room(hass, {"visible_controls": ["fan_mode", "swing_mode"]})
     await hass.async_block_till_done()
 
     trimmed = hass.states.get("climate.bedroom")
@@ -699,3 +699,18 @@ async def test_a_rooms_entity_ids_are_predictable(hass: HomeAssistant):
     assert hass.states.get("climate.bedroom") is not None
     assert hass.states.get("binary_sensor.bedroom_heat_demand") is not None
     assert hass.states.get("climate.bedroom").attributes["friendly_name"] == "Bedroom"
+
+
+async def test_a_thermostat_says_which_room_it_is(hass: HomeAssistant):
+    """The page joins a card to its room by this. Matching on the friendly
+    name breaks the moment two rooms are named alike."""
+    hass.states.async_set("sensor.bedroom_temperature", "21.0")
+    await add_room(
+        hass,
+        **{
+            CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature",
+            CONF_HEATERS: ["switch.radiator"],
+        },
+    )
+    room_id = hass.data[DOMAIN]["store"].rooms[0].id
+    assert hass.states.get("climate.bedroom").attributes["room_id"] == room_id
