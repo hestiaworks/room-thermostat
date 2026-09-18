@@ -26,20 +26,24 @@ from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event
 
 from . import entry_type
-from .const import DOMAIN, ENTRY_HUB, SIGNAL_DEMAND, SIGNAL_ROOMS
-from .seasons import season_entity_ids
+from .const import (
+    DOMAIN,
+    ENTRY_HUB,
+    SIGNAL_DEMAND,
+    SIGNAL_OUTDOOR_AVERAGE,
+    SIGNAL_ROOMS,
+)
 from .store import RoomStore
 
 
 class OutdoorAverage(SensorEntity):
     """The damped outdoor temperature, as a number with a history.
 
-    It is read from the heating season sensor rather than computed again here:
-    one place owns the filter, and two implementations of it would disagree by
-    small amounts and be impossible to reason about.
+    The season sensor owns the filter and sends the value here: one place
+    computes it, and two implementations of it would disagree by small amounts
+    and be impossible to reason about.
     """
 
     _attr_has_entity_name = False
@@ -59,26 +63,21 @@ class OutdoorAverage(SensorEntity):
             manufacturer="Room Thermostat",
         )
 
-    @property
-    def native_value(self) -> float | None:
-        heating, _ = season_entity_ids(self.hass)
-        state = None if heating is None else self.hass.states.get(heating)
-        if state is None:
-            return None
-        value = state.attributes.get("damped")
-        return float(value) if isinstance(value, (int, float)) else None
-
     async def async_added_to_hass(self) -> None:
-        heating, _ = season_entity_ids(self.hass)
-        if not heating:
-            return
+        # Whatever the season sensor last worked out, in case it set up first.
+        held = self.hass.data.get(DOMAIN, {}).get("outdoor_average")
+        if isinstance(held, (int, float)):
+            self._attr_native_value = round(float(held), 2)
 
         @callback
-        def _changed(_: Event) -> None:
+        def _average(value: float | None) -> None:
+            self._attr_native_value = (
+                None if value is None else round(float(value), 2)
+            )
             self.async_write_ha_state()
 
         self.async_on_remove(
-            async_track_state_change_event(self.hass, [heating], _changed)
+            async_dispatcher_connect(self.hass, SIGNAL_OUTDOOR_AVERAGE, _average)
         )
 
 

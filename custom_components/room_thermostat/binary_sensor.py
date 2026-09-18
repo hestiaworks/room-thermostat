@@ -24,7 +24,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
+    async_dispatcher_send,
+)
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
@@ -51,6 +54,7 @@ from .const import (
     OUTDOOR_LOST_SECONDS,
     SANE_OUTDOOR,
     SIGNAL_DEMAND,
+    SIGNAL_OUTDOOR_AVERAGE,
     SIGNAL_ROOMS,
 )
 
@@ -290,6 +294,7 @@ class HeatingSeason(_Season, RestoreEntity):
             self._pending_since = None
             self._report_lost(now)
             self._attr_is_on = True
+            self._publish_average()
             return
         self._report_lost(None)
         elapsed = 0.0 if self._last is None else now - self._last
@@ -311,6 +316,19 @@ class HeatingSeason(_Season, RestoreEntity):
             now,
             self._house.season_dwell_hours * 3600.0,
         )
+        self._publish_average()
+
+    def _publish_average(self) -> None:
+        """Hand the average to whoever draws it.
+
+        The sensor that records it used to read this one's attribute back out
+        of the state machine, which only worked if the platforms happened to
+        set up in the right order. The last value is kept in hass.data as well
+        as sent, so a listener that arrives late is not stuck on unknown until
+        the next tick.
+        """
+        self.hass.data.setdefault(DOMAIN, {})["outdoor_average"] = self._damped
+        async_dispatcher_send(self.hass, SIGNAL_OUTDOOR_AVERAGE, self._damped)
 
     def _report_lost(self, now: float | None) -> None:
         """A heating decision made on a source nobody noticed had gone is the

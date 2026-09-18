@@ -95,6 +95,10 @@ STORE_VERSION = 1
 SIGNAL_ROOMS = "room_thermostat_rooms"
 # One room's settings changed, by id. Its entities re-read and re-subscribe.
 SIGNAL_ROOM = "room_thermostat_room"
+# The damped outdoor average, whenever it is recomputed. One sensor owns the
+# filter and the other publishes it, rather than reading it back out of the
+# first one's attributes and depending on which platform set up first.
+SIGNAL_OUTDOOR_AVERAGE = "room_thermostat_outdoor_average"
 
 # --- the page ------------------------------------------------------------
 
@@ -102,4 +106,4 @@ PAGE_COMPONENT = "room-thermostat-page"
 PAGE_URL_PATH = "room-thermostat"
 # Keep the query string in step with the manifest version: a browser serves
 # the cached page until it changes, so a drift ships code nobody loads.
-PAGE_MODULE_URL = "/room_thermostat/frontend/room-thermostat-page.js?v=0.16.5"
+PAGE_MODULE_URL = "/room_thermostat/frontend/room-thermostat-page.js?v=0.16.6"

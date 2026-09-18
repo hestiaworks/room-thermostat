@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -392,3 +393,27 @@ async def test_heat_demand_is_also_a_number(hass: HomeAssistant):
     assert state is not None
     assert state.attributes["state_class"] == "measurement"
     assert float(state.state) in (0.0, 1.0)
+
+
+async def test_the_average_does_not_depend_on_which_platform_set_up_first(
+    hass: HomeAssistant,
+):
+    """It used to be read back out of the season sensor's attributes through
+    the entity registry. If the sensor platform won the race that lookup found
+    nothing, no listener was ever attached, and the average stayed unknown
+    until Home Assistant was restarted into the other order — which is how it
+    passed on one interpreter and failed on another."""
+    from custom_components.room_thermostat.const import SIGNAL_OUTDOOR_AVERAGE
+
+    hass.states.async_set("sensor.outdoor", "8.0")
+    await seasons(hass, outdoor_sensor="sensor.outdoor")
+
+    # Whoever asks, whenever they ask, gets the value the filter holds.
+    assert hass.data[DOMAIN]["outdoor_average"] == 8.0
+    assert float(hass.states.get("sensor.outdoor_average").state) == 8.0
+
+    seen = []
+    async_dispatcher_connect(hass, SIGNAL_OUTDOOR_AVERAGE, seen.append)
+    hass.states.async_set("sensor.outdoor", "4.0")
+    await hass.async_block_till_done()
+    assert seen and seen[-1] is not None
