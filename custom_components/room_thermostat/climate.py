@@ -65,6 +65,7 @@ from .const import (
     DEFAULT_WARM_ON,
     DOMAIN,
     SIGNAL_DEMAND,
+    SENSOR_LOST_SECONDS,
     SIGNAL_ROOM,
     SIGNAL_ROOMS,
 )
@@ -177,6 +178,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         self._demand = False
         self._frost = False
         self._retry: Callable[[], None] | None = None
+        self._lost_since: float | None = None
         # A device per room, so its thermostat and its demand sensor group
         # together and both take the room's name.
         self._attr_device_info = DeviceInfo(
@@ -447,6 +449,7 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         )
 
     async def _apply(self) -> None:
+        now = dt_util.utcnow().timestamp()
         decision = control.decide(
             self._config(),
             control.Readings(
@@ -465,13 +468,13 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
                 target_high=self._target_high,
             ),
             self._state,
-            now=dt_util.utcnow().timestamp(),
+            now=now,
         )
         self._state = decision.state
         self._action = ACTIONS[decision.hvac_action]
         self._schedule_retry(decision.retry_after)
         self._frost = decision.frost_active
-        self._report_sensor(decision.sensor_lost)
+        self._report_sensor(decision.sensor_lost, now)
 
         await self._command(decision)
 
@@ -618,10 +621,21 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
         self._resubscribe()
         self.hass.async_create_task(self._apply())
 
-    def _report_sensor(self, lost: bool) -> None:
-        """A heating system that fails silent in winter is not acceptable."""
+    def _report_sensor(self, lost: bool, now: float) -> None:
+        """A heating system that fails silent in winter is not acceptable.
+
+        The loop acts on a missing reading at once; the human is told only once
+        it has stayed missing, so a restart does not raise one false alarm per
+        room. The thirty second tick is what raises it if nothing else runs.
+        """
         issue = f"sensor_lost_{self._room_id}"
-        if lost:
+        if not lost:
+            self._lost_since = None
+            ir.async_delete_issue(self.hass, DOMAIN, issue)
+            return
+        if self._lost_since is None:
+            self._lost_since = now
+        if now - self._lost_since >= SENSOR_LOST_SECONDS:
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
@@ -634,8 +648,6 @@ class RoomThermostat(ClimateEntity, RestoreEntity):
                     "sensor": self._sensor or "",
                 },
             )
-        else:
-            ir.async_delete_issue(self.hass, DOMAIN, issue)
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

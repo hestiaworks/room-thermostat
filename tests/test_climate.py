@@ -714,3 +714,72 @@ async def test_a_thermostat_says_which_room_it_is(hass: HomeAssistant):
     )
     room_id = hass.data[DOMAIN]["store"].rooms[0].id
     assert hass.states.get("climate.bedroom").attributes["room_id"] == room_id
+
+
+async def test_a_sensor_still_starting_up_is_not_reported_as_lost(
+    hass: HomeAssistant, freezer
+):
+    """After a restart a room's sensor reads unavailable until its own
+    integration reports, which here took most of a minute. A repair raised in
+    that window is a false alarm that clears itself; only a sensor that stays
+    gone is worth telling a human about."""
+    from datetime import timedelta
+
+    from homeassistant.helpers import issue_registry as ir
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    hass.states.async_set("sensor.bedroom_temperature", "unavailable")
+    entry = await add_room(
+        hass, **{CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature"}
+    )
+    room_id = hass.data[DOMAIN]["store"].rooms[0].id
+    issue = f"sensor_lost_{room_id}"
+    issues = ir.async_get(hass)
+
+    def tick(seconds: float) -> None:
+        freezer.tick(timedelta(seconds=seconds))
+        async_fire_time_changed(hass, dt_util.utcnow())
+
+    tick(40)
+    await hass.async_block_till_done()
+    assert issues.async_get_issue(DOMAIN, issue) is None
+
+    hass.states.async_set("sensor.bedroom_temperature", "20.5")
+    await hass.async_block_till_done()
+    assert issues.async_get_issue(DOMAIN, issue) is None
+
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_a_sensor_that_stays_gone_is_reported_and_cleared_on_return(
+    hass: HomeAssistant, freezer
+):
+    """The grace delays the warning; it must not swallow it."""
+    from datetime import timedelta
+
+    from homeassistant.helpers import issue_registry as ir
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    hass.states.async_set("sensor.bedroom_temperature", "unavailable")
+    entry = await add_room(
+        hass, **{CONF_TEMPERATURE_SENSOR: "sensor.bedroom_temperature"}
+    )
+    room_id = hass.data[DOMAIN]["store"].rooms[0].id
+    issue = f"sensor_lost_{room_id}"
+    issues = ir.async_get(hass)
+
+    for _ in range(11):  # five and a half minutes of thirty second ticks
+        freezer.tick(timedelta(seconds=30))
+        async_fire_time_changed(hass, dt_util.utcnow())
+        await hass.async_block_till_done()
+    assert issues.async_get_issue(DOMAIN, issue) is not None
+
+    hass.states.async_set("sensor.bedroom_temperature", "20.5")
+    await hass.async_block_till_done()
+    assert issues.async_get_issue(DOMAIN, issue) is None
+
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

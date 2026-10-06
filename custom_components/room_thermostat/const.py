@@ -85,6 +85,10 @@ DEFAULT_SEASON_OVERRIDE = 4.0
 SANE_OUTDOOR = (-50.0, 60.0)
 # How long an outdoor source may be missing before a human is told.
 OUTDOOR_LOST_SECONDS = 3600.0
+# How long a room's own sensor may be missing before a human is told. After a
+# restart every sensor reads unavailable until its integration reports, which
+# here takes most of a minute; a warning in that window is a false alarm.
+SENSOR_LOST_SECONDS = 300.0
 
 # --- the record the page edits -------------------------------------------
 

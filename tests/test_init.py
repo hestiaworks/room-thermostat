@@ -48,17 +48,27 @@ async def test_a_room_unloads_cleanly(hass: HomeAssistant):
     assert entry.entry_id not in hass.data.get(DOMAIN, {})
 
 
-async def test_a_lost_sensor_asks_a_human_for_help(hass: HomeAssistant):
+async def test_a_lost_sensor_asks_a_human_for_help(hass: HomeAssistant, freezer):
     """Failing silent is not acceptable for a heating system: the room is now
-    on a blind duty cycle and somebody needs to know."""
+    on a blind duty cycle and somebody needs to know — once the sensor has
+    stayed gone, rather than the moment it blinks."""
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
     hass.states.async_set("sensor.bedroom_temperature", "22.0")
     await bedroom(hass)
     room_id = hass.data[DOMAIN]["store"].rooms[0].id
 
     hass.states.async_set("sensor.bedroom_temperature", "unavailable")
     await hass.async_block_till_done()
-
     registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, f"sensor_lost_{room_id}") is None
+
+    freezer.tick(timedelta(minutes=5))
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done()
     assert registry.async_get_issue(DOMAIN, f"sensor_lost_{room_id}") is not None
 
 
