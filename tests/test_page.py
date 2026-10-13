@@ -481,3 +481,16 @@ def test_a_click_outside_an_open_picker_closes_it(source: str):
     assert "composedPath()" in handler
     assert "[data-picker]" in handler
     assert "dataset?.pick" in handler
+
+
+def test_the_room_editor_offers_heating_with_the_ac(source: str):
+    editor = source[source.index("  roomEditor() {"):source.index("  // --- ", source.index("  roomEditor() {"))]
+    assert 'name="allow_ac_heat"' in editor
+    # Only meaningful with an air conditioner to do it.
+    assert 'draft.cooler ? "" : "disabled"' in editor
+
+
+def test_heating_with_the_ac_is_saved_as_a_boolean(source: str):
+    # The server keeps what it is sent, and the string "off" is true in Python.
+    payload = source[source.index("  roomPayload() {"):source.index("  async saveRoom() {")]
+    assert "draft.allow_ac_heat = draft.allow_ac_heat === true || draft.allow_ac_heat === \"on\"" in payload

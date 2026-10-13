@@ -1246,6 +1246,14 @@ class RoomThermostatPage extends HTMLElement {
             </div>
             <div class="control">${this.chooser("heaters", ["valve", "switch", "input_boolean"], null, "Add heater")}</div>
           </div>
+          ${this.settingRow("Heat with the air conditioner",
+            draft.cooler
+              ? "In Heat mode the unit heats this room in its own heat mode, and any valves stay shut: one or the other, never both."
+              : "Needs an air conditioner above.",
+            `<div class="select-wrap"><select name="allow_ac_heat" ${draft.cooler ? "" : "disabled"}>
+              <option value="off" ${draft.allow_ac_heat === true || draft.allow_ac_heat === "on" ? "" : "selected"}>No — only the heaters heat</option>
+              <option value="on" ${draft.allow_ac_heat === true || draft.allow_ac_heat === "on" ? "selected" : ""}>Yes — the air conditioner heats this room</option>
+            </select></div>`)}
           ${this.settingRow("Cooling strategy",
             "Gated is for a unit whose sensor reads its own recirculated air and stops while the room is still warm.",
             `<div class="select-wrap"><select name="cooling_strategy">
@@ -1535,6 +1543,8 @@ class RoomThermostatPage extends HTMLElement {
     for (const key of ["humidity_sensor", "cooler"]) {
       if (draft[key] === "") draft[key] = null;
     }
+    // A select says "on" or "off"; the record keeps a boolean.
+    draft.allow_ac_heat = draft.allow_ac_heat === true || draft.allow_ac_heat === "on";
     if (draft.frost_temperature !== undefined) {
       draft.frost_temperature = Number(draft.frost_temperature);
     }
