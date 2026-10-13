@@ -461,3 +461,23 @@ def test_the_status_bar_inset_adds_to_the_app_bar_rather_than_eating_it(source: 
     bar = source[source.index(".app-bar {") : source.index(".app-bar .mark")]
     assert "min-height:calc(var(--app-bar) + env(safe-area-inset-top, 0px))" in bar
     assert "padding:env(safe-area-inset-top, 0px)" in bar
+
+
+def test_removing_a_heater_is_a_change_that_can_be_saved(source: str):
+    # Adding one marked the room changed; removing one did not, so Save
+    # stayed disabled and the removal could never be kept.
+    handler = source[source.index('querySelectorAll("[data-drop-heater]")'):]
+    handler = handler[:handler.index("this.renderBody()")]
+    assert "this.draftDirty = true" in handler
+
+
+def test_a_click_outside_an_open_picker_closes_it(source: str):
+    assert 'window.addEventListener("click", this.outsideHandler)' in source
+    assert 'window.removeEventListener("click", this.outsideHandler)' in source
+    handler = source[source.index("this.outsideHandler = "):]
+    handler = handler[:handler.index("};")]
+    # Read through the shadow root: a click inside the picker, or on another
+    # row's Change button, is not a click outside.
+    assert "composedPath()" in handler
+    assert "[data-picker]" in handler
+    assert "dataset?.pick" in handler

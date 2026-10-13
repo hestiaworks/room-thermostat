@@ -732,6 +732,18 @@ class RoomThermostatPage extends HTMLElement {
     // renders.
     this.hiddenSeries = new Set();
     this.routeHandler = () => this.restoreRoute();
+    // An open picker closes on a click anywhere else, as a list does. A
+    // click inside it, or on another row's Change button (which opens that
+    // row's picker instead), is left to its own handler.
+    this.outsideHandler = (event) => {
+      if (!this.picking) return;
+      const path = event.composedPath();
+      const picker = this.shadowRoot.querySelector("[data-picker]");
+      if (picker && path.includes(picker)) return;
+      if (path.some((node) => node.dataset?.pick)) return;
+      this.picking = null;
+      this.renderBody();
+    };
   }
 
   set hass(value) {
@@ -751,6 +763,7 @@ class RoomThermostatPage extends HTMLElement {
   connectedCallback() {
     installFonts();
     window.addEventListener("hashchange", this.routeHandler);
+    window.addEventListener("click", this.outsideHandler);
     this.readRoute();
     this.renderShell();
     if (this._hass && !this.loaded) this.load();
@@ -758,6 +771,7 @@ class RoomThermostatPage extends HTMLElement {
 
   disconnectedCallback() {
     window.removeEventListener("hashchange", this.routeHandler);
+    window.removeEventListener("click", this.outsideHandler);
   }
 
   readRoute() {
@@ -2150,6 +2164,7 @@ class RoomThermostatPage extends HTMLElement {
           ...this.draft,
           heaters: (this.draft.heaters || []).filter((entity) => entity !== node.dataset.dropHeater),
         };
+        this.draftDirty = true;
         this.renderBody();
       }));
     root.querySelectorAll("[data-pick]").forEach((node) =>
