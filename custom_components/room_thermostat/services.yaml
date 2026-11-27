@@ -1,0 +1,8 @@
+link:
+  fields:
+    domain: {required: true, example: ebus_boiler, selector: {text: {}}}
+    entry_id: {required: true, selector: {text: {}}}
+    version: {required: true, example: 0.1.0, selector: {text: {}}}
+unlink:
+  fields:
+    domain: {required: true, example: ebus_boiler, selector: {text: {}}}

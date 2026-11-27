@@ -18,6 +18,8 @@ from .const import (
 )
 from .migration import async_migrate
 from . import websocket
+from .boiler_link import BoilerLink
+from .link_services import async_register_link_services
 from .page import async_register_page, async_setup_page_assets, async_unregister_page
 from .store import RoomStore
 
@@ -50,6 +52,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await store.async_load()
         hass.data[DOMAIN]["store"] = store
         websocket.async_register(hass)
+        boiler = BoilerLink(hass, store)
+        hass.data[DOMAIN]["boiler_link"] = boiler
+        await boiler.async_start()
+        entry.async_on_unload(boiler.async_stop)
+        async_register_link_services(hass, entry)
         await async_setup_page_assets(hass)
         async_register_page(hass)
         # A callback, not a lambda: an undecorated callable is run in an

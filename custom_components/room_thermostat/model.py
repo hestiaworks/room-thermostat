@@ -109,6 +109,8 @@ class House:
     cool_limit_hysteresis: float = DEFAULT_LIMIT_HYSTERESIS
     heat_override: float = DEFAULT_SEASON_OVERRIDE
     cool_override: float = DEFAULT_SEASON_OVERRIDE
+    # The linked boiler, {"entry_id", "version"}, or None (heating-modules contract).
+    boiler_link: dict[str, str] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> House:
